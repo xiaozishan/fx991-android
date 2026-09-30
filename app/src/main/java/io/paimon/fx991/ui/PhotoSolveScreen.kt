@@ -15,13 +15,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -51,13 +51,22 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 // ---------------------------------------------------------------------------
-// 批次 E：拍照解题界面
-// 链路：相机/相册取图 → 压缩(≤1600px, JPEG 85) → base64 data URI →
-//       POST {base}/chat/completions（协程 IO，不碰主线程）→
-//       解析 <EXPR>/<RESULT>/<EXPLAIN> → 回填主计算行并求值
+// 拍照解题界面（批次 E：API 视觉模型；批次 F：新增本地离线 OCR 主路径）
+//
+// 两条路并存，界面标注清楚：
+//   本地识别（离线·免费）—— 默认。ML Kit bundled 模型在手机上离线识别，
+//       识别出的文本先给用户看一眼（可编辑），确认后才回填主行求值。
+//   用 API 识别（更准·需配置）—— 批次 E 的视觉模型路径，做兜底。
+//
+// 链路（本地）：相机/相册取图 → 压缩(≤1600px) → ML Kit 离线识别 →
+//   OcrText 合并清洗（复用 PhotoSolve.normalizeExpr）→ 用户确认 →
+//   插入主行 evaluateNow 求值。
+// 链路（API）：取图 → 压缩 → base64 → POST {base}/chat/completions →
+//   解析 <EXPR>/<RESULT>/<EXPLAIN> → 回填主行并求值。
 // ---------------------------------------------------------------------------
 
-private enum class PhotoPhase { IDLE, BUSY, ERROR, DONE }
+private enum class PhotoPhase { IDLE, BUSY, ERROR, CONFIRM, DONE }
+private enum class SolveMode { LOCAL, API }
 
 @Composable
 fun PhotoSolveScreen(vm: CalcViewModel, onBack: () -> Unit) {
@@ -65,6 +74,7 @@ fun PhotoSolveScreen(vm: CalcViewModel, onBack: () -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
 
+    var mode by remember { mutableStateOf(SolveMode.LOCAL) }
     var phase by remember { mutableStateOf(PhotoPhase.IDLE) }
     var prepared by remember { mutableStateOf<PhotoImage.Prepared?>(null) }
     var message by remember { mutableStateOf("") }
@@ -72,18 +82,24 @@ fun PhotoSolveScreen(vm: CalcViewModel, onBack: () -> Unit) {
     var solvedResult by remember { mutableStateOf("") }
     var solvedExplain by remember { mutableStateOf("") }
     var pendingCameraUri by remember { mutableStateOf<Uri?>(null) }
+    // 本地识别的中间结果
+    var localRaw by remember { mutableStateOf("") }
+    var localModel by remember { mutableStateOf("") }
+    var confirmText by remember { mutableStateOf("") }
 
     fun fail(t: Throwable) {
         message = when (t) {
             is PhotoHttpException -> t.message ?: "HTTP ${t.code}"
             is PhotoApiException -> t.message ?: "请求失败"
             is PhotoImage.PhotoImageError -> t.message ?: "图片处理失败"
+            is MlKitOcr.MlKitOcrError -> t.message ?: "本地识别失败"
             else -> "出现意外错误：${t.message ?: t.javaClass.simpleName}"
         }
         phase = PhotoPhase.ERROR
     }
 
-    fun solve(p: PhotoImage.Prepared) {
+    /** API 路径：发视觉模型请求（批次 E 原有链路） */
+    fun solveWithApi(p: PhotoImage.Prepared) {
         phase = PhotoPhase.BUSY
         message = ""
         scope.launch {
@@ -122,6 +138,23 @@ fun PhotoSolveScreen(vm: CalcViewModel, onBack: () -> Unit) {
         }
     }
 
+    /** 本地路径：ML Kit 离线识别 → 文本合并清洗 → 给用户确认 */
+    fun solveLocally(p: PhotoImage.Prepared) {
+        phase = PhotoPhase.BUSY
+        message = ""
+        scope.launch {
+            try {
+                val r = withContext(Dispatchers.IO) { MlKitOcr.recognize(p.bitmap) }
+                localRaw = r.rawText
+                localModel = r.model
+                confirmText = r.cleaned
+                phase = PhotoPhase.CONFIRM
+            } catch (t: Throwable) {
+                fail(t)
+            }
+        }
+    }
+
     fun processUri(uri: Uri) {
         phase = PhotoPhase.BUSY
         message = ""
@@ -129,7 +162,7 @@ fun PhotoSolveScreen(vm: CalcViewModel, onBack: () -> Unit) {
             try {
                 val p = withContext(Dispatchers.IO) { PhotoImage.prepare(ctx.contentResolver, uri) }
                 prepared = p
-                solve(p)
+                if (mode == SolveMode.LOCAL) solveLocally(p) else solveWithApi(p)
             } catch (t: Throwable) {
                 fail(t)
             }
@@ -190,15 +223,44 @@ fun PhotoSolveScreen(vm: CalcViewModel, onBack: () -> Unit) {
             }
 
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                if (!vm.apiReady()) {
-                    // 没配 API：明确说明，不假装能用
+                // ---- 识别路径选择：两条路并存、标注清楚 ----
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Button(
+                        onClick = { mode = SolveMode.LOCAL },
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(
+                            1.dp, if (mode == SolveMode.LOCAL) ShiftOrange else c.keyEdge,
+                        ),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (mode == SolveMode.LOCAL) ShiftOrange else c.keyNeutral,
+                            contentColor = if (mode == SolveMode.LOCAL) ShiftOrangeInk else c.bodyInk,
+                        ),
+                        modifier = Modifier.weight(1f).height(48.dp),
+                    ) { Text("本地识别\n离线·免费", fontSize = 12.5.sp, lineHeight = 16.sp) }
+                    Button(
+                        onClick = { mode = SolveMode.API },
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(
+                            1.dp, if (mode == SolveMode.API) ShiftOrange else c.keyEdge,
+                        ),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (mode == SolveMode.API) ShiftOrange else c.keyNeutral,
+                            contentColor = if (mode == SolveMode.API) ShiftOrangeInk else c.bodyInk,
+                        ),
+                        modifier = Modifier.weight(1f).height(48.dp),
+                    ) { Text("用 API 识别\n更准·需配置", fontSize = 12.5.sp, lineHeight = 16.sp) }
+                }
+                Spacer(Modifier.height(10.dp))
+
+                // ---- API 路径但没配置：明确说明，不假装能用 ----
+                if (mode == SolveMode.API && !vm.apiReady()) {
                     Text(
-                        "还没配置解题 API，拍照解题不可用。",
+                        "还没配置解题 API，这条路不可用（本地识别不需要配置，可直接用）。",
                         color = c.lcdError, fontSize = 14.sp, fontWeight = FontWeight.Bold,
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "这个功能需要把照片发给一个兼容 OpenAI chat/completions 接口的视觉模型服务。" +
+                        "API 识别会把照片发给一个兼容 OpenAI chat/completions 接口的视觉模型服务。" +
                             "请先去设置里填 Base URL、API Key 和模型名（有预设可一键填充）。",
                         color = c.keyNeutralInk, fontSize = 12.5.sp, lineHeight = 19.sp,
                     )
@@ -218,15 +280,17 @@ fun PhotoSolveScreen(vm: CalcViewModel, onBack: () -> Unit) {
                     return@Column
                 }
 
-                // 已配置：当前配置摘要（Key 打码）
-                Text(
-                    "当前服务：${vm.apiBaseUrl.trim()} ｜ 模型：${vm.apiModel.trim()} ｜ " +
-                        "Key：${maskKey(vm.apiKey.trim())}（明文存在本机）",
-                    color = c.keyNeutralInk.copy(alpha = 0.7f), fontSize = 11.sp,
-                )
-                Spacer(Modifier.height(10.dp))
+                // API 路径：当前配置摘要（Key 打码）
+                if (mode == SolveMode.API) {
+                    Text(
+                        "当前服务：${vm.apiBaseUrl.trim()} ｜ 模型：${vm.apiModel.trim()} ｜ " +
+                            "Key：${maskKey(vm.apiKey.trim())}（明文存在本机）",
+                        color = c.keyNeutralInk.copy(alpha = 0.7f), fontSize = 11.sp,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                }
 
-                // 两个取图入口
+                // 两个取图入口（两条路共用）
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Button(
                         onClick = { launchCamera() },
@@ -298,7 +362,13 @@ fun PhotoSolveScreen(vm: CalcViewModel, onBack: () -> Unit) {
 
                 when (phase) {
                     PhotoPhase.BUSY -> Text(
-                        if (prepared == null) "正在处理图片…" else "正在识别与计算（${vm.apiModel.trim()}）…",
+                        when {
+                            prepared == null -> "正在处理图片…"
+                            mode == SolveMode.LOCAL -> "正在本地离线识别（${
+                                if (localModel.isBlank()) "ML Kit" else localModel
+                            }）…"
+                            else -> "正在识别与计算（${vm.apiModel.trim()}）…"
+                        },
                         color = c.keyNeutralInk, fontSize = 13.sp,
                     )
                     PhotoPhase.ERROR -> {
@@ -308,6 +378,75 @@ fun PhotoSolveScreen(vm: CalcViewModel, onBack: () -> Unit) {
                             "点上方「拍照 / 相册」重新选择图片。",
                             color = c.keyNeutralInk.copy(alpha = 0.65f), fontSize = 11.sp,
                         )
+                    }
+                    PhotoPhase.CONFIRM -> {
+                        // 本地识别：先看一眼再确认求值（不默默吃进去）
+                        Text(
+                            "本地识别结果（$localModel），请核对后再求值：",
+                            color = c.bodyInk, fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        OutlinedTextField(
+                            value = confirmText,
+                            onValueChange = { confirmText = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            textStyle = androidx.compose.ui.text.TextStyle(
+                                color = c.bodyInk, fontFamily = Mono, fontSize = 15.sp,
+                            ),
+                            singleLine = true,
+                        )
+                        if (localRaw.isNotBlank()) {
+                            Spacer(Modifier.height(6.dp))
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(c.lcdBg)
+                                    .border(1.dp, c.lcdEdge, RoundedCornerShape(8.dp))
+                                    .padding(10.dp),
+                            ) {
+                                Text(
+                                    "识别原文：${localRaw.trim()}",
+                                    color = c.lcdDim, fontSize = 11.5.sp, lineHeight = 16.sp,
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(10.dp))
+                        Button(
+                            onClick = {
+                                val expr = confirmText.trim()
+                                if (expr.isEmpty()) {
+                                    message = "表达式是空的，请输入或重新选择图片。"
+                                    phase = PhotoPhase.ERROR
+                                    return@Button
+                                }
+                                solvedExpr = expr
+                                solvedResult = ""
+                                solvedExplain = ""
+                                vm.applyPhotoExpr(expr, "本地识别（ML Kit · $localModel）")
+                                phase = PhotoPhase.DONE
+                            },
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = c.keyEquals, contentColor = c.keyEqualsInk,
+                            ),
+                            modifier = Modifier.fillMaxWidth().height(46.dp),
+                        ) { Text("确认：回填主行并求值", fontSize = 14.sp) }
+                        Spacer(Modifier.height(8.dp))
+                        Button(
+                            onClick = {
+                                phase = PhotoPhase.IDLE
+                                prepared = null
+                                localRaw = ""
+                                confirmText = ""
+                            },
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(1.dp, c.keyEdge),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = c.keyNeutral, contentColor = c.bodyInk,
+                            ),
+                            modifier = Modifier.fillMaxWidth().height(42.dp),
+                        ) { Text("不对，重新选图", fontSize = 13.sp) }
                     }
                     PhotoPhase.DONE -> {
                         Box(
@@ -346,14 +485,24 @@ fun PhotoSolveScreen(vm: CalcViewModel, onBack: () -> Unit) {
                         ) { Text("回到计算器查看结果", fontSize = 14.sp) }
                     }
                     PhotoPhase.IDLE -> Text(
-                        "拍一张算式照片（或从相册选一张），识别后会自动算出来并回填到计算行。",
+                        if (mode == SolveMode.LOCAL) {
+                            "拍一张算式照片（或从相册选一张），本地离线识别后会先给你看识别结果，" +
+                                "确认无误再回填计算行求值。"
+                        } else {
+                            "拍一张算式照片（或从相册选一张），识别后会自动算出来并回填到计算行。"
+                        },
                         color = c.keyNeutralInk.copy(alpha = 0.7f), fontSize = 12.sp, lineHeight = 18.sp,
                     )
                 }
 
                 Spacer(Modifier.height(14.dp))
                 Text(
-                    "注意：照片会被压缩后发送给你在设置里配置的服务商（最长边 1600px，JPEG 85）。",
+                    if (mode == SolveMode.LOCAL) {
+                        "本地识别完全在手机上离线进行（ML Kit 模型随安装包发布），照片不会上传。" +
+                            "对印刷体算式效果较好；手写体、根号、分数等二维结构识别能力有限。"
+                    } else {
+                        "注意：照片会被压缩后发送给你在设置里配置的服务商（最长边 1600px，JPEG 85）。"
+                    },
                     color = c.keyNeutralInk.copy(alpha = 0.55f), fontSize = 10.5.sp, lineHeight = 15.sp,
                 )
                 Spacer(Modifier.height(8.dp))

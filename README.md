@@ -1,4 +1,4 @@
-# 科学计算器（自然书写 LCD 复刻）· v2 + 批次 A + 批次 B + 批次 C + 系统栏避让 + 统一输入面 + 批次 D + 批次 E（拍照解题 + API 自由配置）
+# 科学计算器（自然书写 LCD 复刻）· v2 + 批次 A + 批次 B + 批次 C + 系统栏避让 + 统一输入面 + 批次 D + 批次 E（拍照解题 + API 自由配置）+ 批次 F（本地离线 OCR）
 
 Android 科学计算器。界面与交互参考一台科学计算器手机 App（键位、配色、自然书写 LCD），
 **不含任何品牌厂商的商标、logo、字体或官方图片资源** —— 全部 UI 由 Jetpack Compose 手写绘制，
@@ -10,7 +10,24 @@ Android 科学计算器。界面与交互参考一台科学计算器手机 App�
 app/build/outputs/apk/debug/app-debug.apk
 ```
 
-本批（**批次 E：拍照解题 + 解题 API 自由配置**）交付件：
+本批（**批次 F：本地离线 OCR 拍照解题**）交付件：
+
+| 项 | 值 |
+|:--|:--|
+| 绝对路径 | `C:\Users\Administrator\.openclaw\workspace\projects\casio-calc-android\app\build\outputs\apk\debug\app-debug.apk` |
+| 大小 | 55,443,467 bytes（≈ 52.87 MB，`assembleDebug`） |
+| SHA-256 | `1240E410CA2BF58628A94E556DEB75D377DE967AAC0924A7BAB7737D1A7A4745` |
+| 包名 / 版本 | `io.paimon.fx991` · versionCode 1 / versionName 1.0.0（应用内版本串 `1.6.0-offline-ocr`） |
+| 体积变化 | 批次 E 10,263,864 → 本批 55,443,467 bytes（**+45,179,603 bytes ≈ +43.1 MB**），增量几乎全部来自 ML Kit bundled 识别模型 |
+
+> ⚠️ **本批引入工程的第一个第三方依赖**（旅行者明确要求的例外）：Google ML Kit 文字识别
+> （`com.google.mlkit:text-recognition-chinese:16.0.1` + `com.google.mlkit:text-recognition:16.0.1`，
+> **bundled 版，模型随 APK 发布、不依赖 Google Play 服务、完全离线**）。原因是「本地离线 OCR」无法用手写代码
+> 合理实现。除此之外未再引入任何其他第三方库。APK 内 ML Kit 相关内容：压缩后合计 ≈ 42,995,492 bytes
+> （4 个 ABI 的 `libmlkit_google_ocr_pipeline.so` ≈ 41.03 MB + 模型 assets ≈ 1.96 MB），
+> 解压后 ≈ 43,551,957 bytes。
+
+上一批（**批次 E：拍照解题 + 解题 API 自由配置**）交付件：
 
 | 项 | 值 |
 |:--|:--|
@@ -33,7 +50,76 @@ app/build/outputs/apk/debug/app-debug.apk
 批次 B：9,695,900 bytes，SHA-256 `E9D2AA5C79C39ED87EB66B39048438779826B288A9CF1C90500610425CB97ECC`；
 批次 A：9,663,132 bytes，SHA-256 `8F66F3D05EBF217E42D430A2B48EEDB069A97A8F0FD7D62978386794E13B5789`。）
 
-## 批次 D 做了什么（本次）
+## 批次 F 做了什么（本次）
+
+目标：给拍照解题加「**本地离线 OCR**」主路径 —— Google ML Kit 文字识别（中文 bundled），
+不联网、不花钱、不需要任何配置；原视觉模型 API 路径保留为兜底。
+
+### 界面两条路并存（拍照解题页顶部二选一，默认本地）
+
+| 路径 | 标注 | 链路 |
+|:--|:--|:--|
+| **本地识别（离线·免费）** ← 默认 | 按钮「本地识别 离线·免费」 | 拍照/相册 → 压缩（≤1600px）→ ML Kit 离线识别 → `OcrText` 多行合并清洗（复用 `PhotoSolve.normalizeExpr`）→ **先给用户看识别结果（可编辑），确认后**才回填主行 `evaluateNow` 求值 |
+| **用 API 识别（更准·需配置）** | 按钮「用 API 识别 更准·需配置」 | 批次 E 原链路不变：base64 → POST chat/completions → `<EXPR>` 解析 → 回填求值；未配置时给配置引导 |
+
+### 实现方式
+
+- `app/build.gradle.kts`：**第一个第三方依赖** —— `com.google.mlkit:text-recognition-chinese:16.0.1`
+  （中文模型，兼认拉丁字母/数字）+ `com.google.mlkit:text-recognition:16.0.1`（拉丁模型，整图空白时兜底）。
+- 新增 `engine/OcrText.kt`（**纯 Kotlin，可 JVM 回归**）：多行合并、OCR 专有符号修正、小数点误识别修复、
+  易混字符纠正；全角→半角 / `×÷` 归一 / `**`→`^` / 去空白 **复用批次 E 的 `PhotoSolve.normalizeExpr`**。
+- 新增 `ui/MlKitOcr.kt`（Android 侧封装）：中文 bundled 模型优先，整图空白退回拉丁模型；
+  抽出行列表交给 `OcrText.cleanLines`；只能真机验证（Bitmap / ML Kit native），JVM 不测。
+- 改写 `ui/PhotoSolveScreen.kt`：路径选择按钮、本地识别的**确认页**（表达式可编辑 + 识别原文对照 +
+  「确认：回填主行并求值」/「不对，重新选图」）；API 路径行为保持不变。
+- 应用内版本串 `1.6.0-offline-ocr`；相机仍走 `ACTION_IMAGE_CAPTURE`，**不申请 CAMERA 权限**；
+  未新增图片 / 字体资源。
+
+### 文本清洗规则清单（engine/OcrText.kt）
+
+**会纠正**：
+
+| 规则 | 例 |
+|:--|:--|
+| 多行 / 多块合并：去首尾空白、丢空行、按序直接拼接 | `"12+3" × "×4"` → `12+3×4` |
+| 全角→半角（数字 / 加减乘除 / 括号 / 幂 / 逗号句号等，复用 normalizeExpr） | `１２＋３４` → `12+34` |
+| 根号误识别 `✓ ✔ ∨ ⎷` → `√` | `✓(4)` → `√(4)` |
+| 全角等号 `＝` → `=`；数学减号 U+2212 → `-` | `x＋1＝2` → `x+1=2` |
+| 中文数字 `〇` → `0` | `1〇2` → `102` |
+| 小数点误识别：两个数字之间的 `。` / `·` → `.` | `3。14` → `3.14` |
+| 不在数字间的 `。` 丢弃（非法字符，留着必报语法错误） | `3。+2` → `3+2` |
+| 易混字符 `O/o`→`0`、`l/I/|`→`1` —— **仅左右至少一侧是数字或小数点时** | `1O2` → `102`、`3l4` → `314` |
+| `**` → `^`；ASCII `*` `/` → `×` `÷`；去全部空白（复用 normalizeExpr） | `2**10` → `2^10` |
+
+**故意不纠正**（过度纠正会改变原意；反正用户会先看一眼再确认）：
+
+| 不纠正 | 理由 |
+|:--|:--|
+| 单独的 `O` / `o` / `l` / `I`（两侧无数字） | 可能是变量 / 函数名一部分；`log`、`sin` 里的字母绝不能动 |
+| `,` 在数字间**不**改小数点 | 逗号是引擎双参数函数分隔符（`logb(2,8)`） |
+| `x` / `X` **不**改 `×` | `x` 是合法未知数（`3x+1=5`） |
+| `S`→`5`、`B`→`8`、`Z`→`2`、`G`→`6`、`q`→`9` | 字形误纠正风险高，字母可能是真变量 |
+| `:` **不**改 `÷` | 比例 / 时间场景歧义大 |
+
+### 回归与验证
+
+- 新增 `tools/OcrTextTest.java`（**50 条**）：多行合并 / 全角半角 / 根号等 OCR 符号 / 小数点误识别 /
+  易混字符纠正与不纠正边界 / 清洗结果端到端可被引擎求值。
+- 全量回归 **834/834** 全过（784 + 50；`powershell -File tools\run-tests.ps1`）。
+- `assembleDebug` 绿。APK 55,443,467 bytes（批次 E：10,263,864，**+45,179,603**）；
+  ML Kit 相关内容在 APK 内压缩后 ≈ 42,995,492 bytes（`.so` 四 ABI ≈ 41.03 MB + 模型 assets ≈ 1.96 MB）。
+
+### 已知限制（老实说）
+
+- ML Kit 文字识别是**一维文本行识别**：对**印刷体**的加减乘除 / 幂 / 括号算式效果较好；
+  对手写体、**根号、分数线、上下标、积分号等二维结构基本认不出来**（会认成一串符号或漏掉），
+  这类场景请切「用 API 识别」（视觉模型能理解二维结构）。
+- ML Kit 本体依赖 Android 运行时（Bitmap / native .so），**无法 JVM 测**；本轮验证为「编译绿 +
+  834 条 JVM 回归全过（纯逻辑部分全覆盖）」，**未做真机 / 模拟器验证**（emulator-5554 被其他任务占用，按要求未动）。
+- bundled 模型把 APK 从 ≈9.8 MB 撑到 ≈52.9 MB（4 个 ABI 的 .so 占大头）；如需减重可后续上
+  App Bundle / ABI 分包，本批未做。
+
+## 批次 D 做了什么（上一批）
 
 目标：补齐 MODE 菜单里最后 4 个「待实现」模式，并清掉剩余占位 / 死代码 —— **模式菜单 12 项全部可用**。
 
@@ -307,9 +393,12 @@ app/build/outputs/apk/debug/app-debug.apk
 | Compose BOM | 2024.09.00 |
 | Android SDK | `D:\applications\Android\Sdk` |
 
-**零第三方依赖**：只用 AndroidX（core-ktx / activity-compose / lifecycle-viewmodel-compose /
-compose ui / foundation / material3）。解析器、有理数、RK4、数值算法全部手写。批次 A 与批次 B 均
-**未新增任何依赖、图片、图标、字体资源**。
+**第一个第三方依赖（批次 F，旅行者明确要求的例外）**：Google ML Kit 文字识别 bundled 版
+（`com.google.mlkit:text-recognition-chinese:16.0.1` + `com.google.mlkit:text-recognition:16.0.1`），
+用于本地离线 OCR，模型随 APK 发布、不依赖 Google Play 服务。除此之外仍然零第三方库：其余只用
+AndroidX（core-ktx / activity-compose / lifecycle-viewmodel-compose / compose ui / foundation / material3）。
+解析器、有理数、RK4、数值算法全部手写。批次 A 与批次 B 均未新增任何依赖、图片、图标、字体资源；
+批次 F 也未新增图片 / 字体资源。
 
 ## 构建
 
@@ -356,6 +445,9 @@ app/src/main/java/io/paimon/fx991/
     BaseN.kt                  批次 D 新增：DEC/HEX/BIN/OCT 互转 + 位运算 + 字长 16/32/64 + 补码
     TableGen.kt               批次 D 新增：函数表生成（f(x) / 可选 g(x)，起终值 / 步长 / 行数上限）
     RatioOps.kt               批次 D 新增：比例 a:b=c:x 与 a:b=x:d（精确有理数）
+    PhotoSolve.kt             批次 E：拍照解题纯逻辑（配置 / URL / JSON / 回复解析 / 表达式规整 / 尺寸计算）
+    PhotoNet.kt               批次 E：HTTP 层（HttpURLConnection，纯 JVM 可测）
+    OcrText.kt                批次 F 新增：本地 OCR 文本合并与清洗（多行合并 / 符号归一 / 易混字符纠正，纯 Kotlin）
   ui/
     Theme.kt                  DayNight 双套配色 + 计算器专用颜色令牌（橙 SHIFT / 紫 ALPHA）
     Keys.kt                   键位表（照参考图：顶栏 8 项 + 键盘 9 行）+ MODE 菜单条目
@@ -370,6 +462,9 @@ app/src/main/java/io/paimon/fx991/
     ModeScreens.kt            批次 D 新增：方程 / 基数换算 / 函数表 / 比例 四个独立界面
     Insets.kt                 系统栏避让新增：Modifier.safeAreaPadding()（WindowInsets.safeDrawing，全界面共用）
     SafeArea.kt               系统栏避让新增：可用高度 / 紧凑滚动布局策略（纯 Kotlin，可 JVM 回归）
+    PhotoSolveScreen.kt       批次 E：拍照解题界面；批次 F 改写：本地识别 / API 识别双路径并存
+    PhotoImage.kt             批次 E：图片管线（解码 / EXIF 方向校正 / 等比缩放 / JPEG 压缩）
+    MlKitOcr.kt               批次 F 新增：ML Kit bundled 离线识别封装（中文优先，拉丁兜底；Android 侧，JVM 不测）
 app/src/main/res/
   values, values-night        DayNight 主题与颜色
   drawable, drawable-night    自适应图标背景（浅/深两套）
@@ -391,7 +486,9 @@ tools/
                             BASE-N 解析显示补码位运算 / 函数表生成与校验 / 比例精确解）
   PhotoAiTest.java            批次 E 回归（93 条：配置校验/默认值/URL 拼接/JSON 构造转义与多段解析/
                               EXPR 抽取/表达式规整/缩放与 base64/HTTP 文案/本机 HttpServer 全链路）
-  run-tests.ps1             一次跑完十二套
+  OcrTextTest.java            批次 F 回归（50 条：多行合并 / 全角半角 / OCR 符号修正 / 小数点误识别 /
+                              易混字符纠正与不纠正边界 / 清洗结果端到端可求值）
+  run-tests.ps1               一次跑完十三套
 ```
 
 ## 表达式引擎
@@ -500,7 +597,7 @@ Value = Exact(Rational) | Floating(Double)
 powershell -File tools\run-tests.ps1
 ```
 
-本次（批次 E：拍照解题 + API 自由配置）的结果（全部通过，共 **784** 条）：
+本次（批次 F：本地离线 OCR）的结果（全部通过，共 **834** 条）：
 
 ```
 EngineTest    pass=70  fail=0     # v1 资产，不许退步
@@ -517,13 +614,16 @@ BatchDTest    pass=87  fail=0     # 批次 D：多项式精确根/Durand-Kerner 
                                   #          BASE-N 解析·四进制显示·补码·位运算·字长/函数表生成与校验/比例精确解
 PhotoAiTest   pass=93  fail=0     # 批次 E：配置校验与默认值/URL 拼接/JSON 构造转义与多段解析/EXPR 抽取/
                                   #          表达式规整/缩放与 base64/HTTP 文案/本机 HttpServer 全链路
+OcrTextTest   pass=50  fail=0     # 批次 F：多行合并/全角半角/OCR 符号修正/小数点误识别/
+                                  #          易混字符纠正与不纠正边界/清洗结果端到端可求值
 ```
 
-> 691（批次 D 结束）+ 93（批次 E）= **784** 条，原有各套无一条退步。
+> 784（批次 E 结束）+ 50（批次 F）= **834** 条，原有各套无一条退步。
 
 单跑某套见 `tools/run-tests.ps1` 内的 javac/java 命令行（classpath 用
 `app\build\tmp\kotlin-classes\debug` + kotlin-stdlib 2.0.21）。
 
 > 未接设备 / 模拟器（emulator-5554 被其他任务占用，按要求未动），本轮验证为「编译绿（`assembleDebug`）+
-> **784 条 JVM 回归全通过** + 产物审计（源码无商标字样、无硬编码 key、唯一新增权限 INTERNET、未新增图片/字体资源，
-> 只多了 `res/xml/file_paths.xml`）」，未做真机 UI 走查，未真连外部 API（无真实 key）。
+> **834 条 JVM 回归全通过** + 产物审计（源码无商标字样、无硬编码 key、批次 F 新增 ML Kit 两个 artifact
+> 外无其他第三方库、未新增图片/字体资源、未新增权限）」，未做真机 UI 走查，未真连外部 API（无真实 key）；
+> ML Kit 本体依赖 Android 运行时，其识别效果未在真机 / 模拟器上验证。
