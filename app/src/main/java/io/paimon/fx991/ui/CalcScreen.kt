@@ -68,7 +68,7 @@ import io.paimon.fx991.engine.SiPrefixes
 import io.paimon.fx991.engine.UnitConvert
 import io.paimon.fx991.engine.label
 
-const val APP_VERSION = "1.8.0-cursor"
+const val APP_VERSION = "1.9.0-keymap"
 const val APP_REPO = "https://github.com/xiaozishan/workspace"
 
 @Composable
