@@ -59,6 +59,16 @@ sealed interface KeyAction {
     /** Ran#：插入一个 0–1 随机数 */
     data object RandomInsert : KeyAction
 
+    // ---- 批次 K4：参照截图补齐 ----
+    /** COPY：复制主行表达式（空则复制结果） */
+    data object CopyExpr : KeyAction
+    /** PASTE：粘贴已复制的表达式 */
+    data object PasteExpr : KeyAction
+    /** CLRv：清空 STO 变量（A–F / x / y） */
+    data object ClrVars : KeyAction
+    /** x⇄y：交换 x 与 y 的值 */
+    data object SwapXY : KeyAction
+
     // ---- 批次 C：六大子系统入口（直接切到对应界面） ----
     data class GoScreen(val screen: Screen) : KeyAction
 }
@@ -122,7 +132,7 @@ fun utilityBar(mode: AngleMode): List<Key> = listOf(
     Key(mode.label, KeyKind.UTIL, KeyAction.ToggleAngle),
 )
 
-/** 键盘主体：9 行，照参考图排布 */
+/** 键盘主体：9 行，照参考图排布（批次 K4：SHIFT/ALPHA 层逐键对齐参照截图） */
 fun keypadRows(): List<List<Key>> = listOf(
 
     // 第 2 排：SHIFT(橙) · ALPHA(紫) · 五向方向键 · MODE · 2nd
@@ -135,34 +145,39 @@ fun keypadRows(): List<List<Key>> = listOf(
         Key("2nd", KeyKind.FUNC, KeyAction.Shift, labelScale = 0.85f),
     ),
 
-    // 第 3 排：CALC · ∫dx · x⁻¹ · logₓy
+    // 第 3 排：CALC · ∫dx · x⁻¹ · logₓy（参照图：CALC 的 ALPHA 层是 =，∫dx 的 ALPHA 层是 ;）
     listOf(
         Key("CALC", KeyKind.FUNC, KeyAction.OpenFunc(FuncKind.CALC),
-            shift = SubKey("SOLVE", KeyAction.OpenFunc(FuncKind.SOLVE))),
+            shift = SubKey("SOLVE", KeyAction.OpenFunc(FuncKind.SOLVE)),
+            alpha = SubKey("=", ins("="))),
         Key("∫dx", KeyKind.FUNC, KeyAction.OpenFunc(FuncKind.INTEGRAL),
-            shift = SubKey("d/dx", KeyAction.OpenFunc(FuncKind.DERIV))),
+            shift = SubKey("d/dx", KeyAction.OpenFunc(FuncKind.DERIV)),
+            alpha = SubKey(";", ins(";"))),
         Key("x\u207B\u00B9", KeyKind.FUNC, ins("\u207B\u00B9("), shift = SubKey("x!", ins("!"))),
         Key("log\u2093y", KeyKind.FUNC, ins("logb("),
             shift = SubKey("Σ", KeyAction.OpenFunc(FuncKind.SUMMATION))),
     ),
 
-    // 第 4 排：分数 · 根号 · 幂 · 对数
+    // 第 4 排：分数 · 根号 · 幂 · 对数（参照图主字写 x/y；√x 的 ALPHA 层是 mod）
     listOf(
-        Key("a/b", KeyKind.FUNC, KeyAction.Fraction,
-            shift = SubKey("▸r", KeyAction.FracFormat)),
-        Key("\u221Ax", KeyKind.FUNC, ins("\u221A("), shift = SubKey("\u00B3\u221Ax", ins("cbrt("))),
+        Key("x/y", KeyKind.FUNC, KeyAction.Fraction,
+            shift = SubKey("ab/c", KeyAction.FracFormat)),
+        Key("\u221Ax", KeyKind.FUNC, ins("\u221A("), shift = SubKey("\u00B3\u221Ax", ins("cbrt(")),
+            alpha = SubKey("mod", ins("mod("))),
         Key("x\u00B2", KeyKind.FUNC, ins("\u00B2"), shift = SubKey("x\u00B3", ins("\u00B3"))),
         Key("x\u02B8", KeyKind.FUNC, ins("^"), shift = SubKey("\u02E3\u221Ay", ins("root("))),
         Key("log", KeyKind.FUNC, ins("log("), shift = SubKey("10\u02E3", ins("10^"))),
         Key("ln", KeyKind.FUNC, ins("ln("), shift = SubKey("e\u02E3", ins("exp("))),
     ),
 
-    // 第 5 排：(-) · °'" · hyp · sin · cos · tan
+    // 第 5 排：(-) · °'" · hyp · sin · cos · tan（参照图：(-) 的 ALPHA 层是 a，°'" 的是 b）
     listOf(
         Key("(\u2212)", KeyKind.FUNC, KeyAction.SignToggle,
-            shift = SubKey("∠", ins("\u2220"))),
+            shift = SubKey("∠", ins("\u2220")),
+            alpha = SubKey("a", ins("A"))),
         Key("\u00B0\u2032\u2033", KeyKind.FUNC, KeyAction.OpenFunc(FuncKind.DMS),
-            shift = SubKey("FACT", ins("!"))),
+            shift = SubKey("FACT", ins("!")),
+            alpha = SubKey("b", ins("B"))),
         Key("hyp", KeyKind.FUNC, KeyAction.OpenFunc(FuncKind.HYPER),
             shift = SubKey("|x|", ins("abs(")),
             alpha = SubKey("c", ins("C"))),
@@ -174,56 +189,84 @@ fun keypadRows(): List<List<Key>> = listOf(
             alpha = SubKey("f", ins("F"))),
     ),
 
-    // 第 6 排：RCL · ENG · ( · ) · S⇔D · M+
+    // 第 6 排：RCL · ENG · ( · ) · S⇔D · M+（参照图：STO/CLRv · i/Cot · %/Cot⁻¹ · ,/x · x⇄y/y · M−/m）
     listOf(
-        Key("RCL", KeyKind.MEM, KeyAction.Mrc, shift = SubKey("STO", KeyAction.OpenSto)),
-        Key("ENG", KeyKind.MEM, KeyAction.EngToggle, shift = SubKey("CONST", KeyAction.OpenConst)),
-        Key("(", KeyKind.FUNC, ins("("), shift = SubKey("CONV", KeyAction.OpenConv)),
-        Key(")", KeyKind.FUNC, ins(")"), shift = SubKey("SI", KeyAction.OpenSi)),
+        Key("RCL", KeyKind.MEM, KeyAction.Mrc,
+            shift = SubKey("STO", KeyAction.OpenSto),
+            alpha = SubKey("CLRv", KeyAction.ClrVars)),
+        Key("ENG", KeyKind.MEM, KeyAction.EngToggle,
+            shift = SubKey("i", ins("i")),
+            alpha = SubKey("Cot", ins("cot("))),
+        Key("(", KeyKind.FUNC, ins("("),
+            shift = SubKey("%", ins("%")),
+            alpha = SubKey("Cot\u207B\u00B9", ins("acot("))),
+        Key(")", KeyKind.FUNC, ins(")"),
+            shift = SubKey(",", ins(",")),
+            alpha = SubKey("x", ins("x"))),
         Key("S\u21D4D", KeyKind.FUNC, KeyAction.Sd,
-            shift = SubKey("Limit", KeyAction.OpenFunc(FuncKind.LIMIT))),
-        Key("M+", KeyKind.MEM, KeyAction.MPlus, shift = SubKey("CLR ALL", KeyAction.ClrAll),
-            alpha = SubKey("M\u2212", KeyAction.MMinus)),
+            shift = SubKey("x\u21C4y", KeyAction.SwapXY),
+            alpha = SubKey("y", ins("y"))),
+        Key("M+", KeyKind.MEM, KeyAction.MPlus,
+            shift = SubKey("M\u2212", KeyAction.MMinus),
+            alpha = SubKey("m", ins("M"))),
     ),
 
-    // 第 7 排：7 8 9 ⌫ AC
+    // 第 7 排：7 8 9 ⌫ AC（参照图：CONST · CONV/SI · Limit/∞ · (无) · CLR ALL）
     listOf(
-        Key("7", KeyKind.DIGIT, ins("7"), shift = SubKey("MATRIX", KeyAction.GoScreen(Screen.MATRIX))),
-        Key("8", KeyKind.DIGIT, ins("8"), shift = SubKey("VECTOR", KeyAction.GoScreen(Screen.VECTOR))),
-        Key("9", KeyKind.DIGIT, ins("9"), shift = SubKey("FUNC HELP", KeyAction.GoScreen(Screen.FUNC_HELP))),
-        Key("", KeyKind.DANGER, KeyAction.Del, shift = SubKey("nPr", ins("npr(")),
-            icon = KeyIcon.BACKSPACE),
+        Key("7", KeyKind.DIGIT, ins("7"), shift = SubKey("CONST", KeyAction.OpenConst)),
+        Key("8", KeyKind.DIGIT, ins("8"),
+            shift = SubKey("CONV", KeyAction.OpenConv),
+            alpha = SubKey("SI", KeyAction.OpenSi)),
+        Key("9", KeyKind.DIGIT, ins("9"),
+            shift = SubKey("Limit", KeyAction.OpenFunc(FuncKind.LIMIT)),
+            alpha = SubKey("\u221E", ins("\u221E"))),
+        Key("", KeyKind.DANGER, KeyAction.Del, icon = KeyIcon.BACKSPACE),
         Key("AC", KeyKind.DANGER, KeyAction.Ac, labelScale = 0.9f,
-            shift = SubKey("nCr", ins("ncr("))),
+            shift = SubKey("CLR ALL", KeyAction.ClrAll)),
     ),
 
-    // 第 8 排：4 5 6 × ÷
+    // 第 8 排：4 5 6 × ÷（参照图：MATRIX · VECTOR · FUNC/HELP · nPr/GCD · nCr/LCM）
     listOf(
-        Key("4", KeyKind.DIGIT, ins("4"), shift = SubKey("STAT", KeyAction.GoScreen(Screen.STAT))),
-        Key("5", KeyKind.DIGIT, ins("5"), shift = SubKey("CMPLX", KeyAction.GoScreen(Screen.CMPLX))),
-        Key("6", KeyKind.DIGIT, ins("6"), shift = SubKey("DISTR", KeyAction.GoScreen(Screen.DISTR))),
-        Key("\u00D7", KeyKind.OP, ins("\u00D7"), shift = SubKey("Pol", KeyAction.OpenFunc(FuncKind.POL)),
-            alpha = SubKey("\u00B7", ins("\u00B7"))),
-        Key("\u00F7", KeyKind.OP, ins("\u00F7"), shift = SubKey("Rec", KeyAction.OpenFunc(FuncKind.REC))),
+        Key("4", KeyKind.DIGIT, ins("4"), shift = SubKey("MATRIX", KeyAction.GoScreen(Screen.MATRIX))),
+        Key("5", KeyKind.DIGIT, ins("5"), shift = SubKey("VECTOR", KeyAction.GoScreen(Screen.VECTOR))),
+        Key("6", KeyKind.DIGIT, ins("6"),
+            shift = SubKey("FUNC", KeyAction.GoScreen(Screen.FUNC_HELP)),
+            alpha = SubKey("HELP", KeyAction.GoScreen(Screen.FUNC_HELP))),
+        Key("\u00D7", KeyKind.OP, ins("\u00D7"),
+            shift = SubKey("nPr", ins("npr(")),
+            alpha = SubKey("GCD", ins("gcd("))),
+        Key("\u00F7", KeyKind.OP, ins("\u00F7"),
+            shift = SubKey("nCr", ins("ncr(")),
+            alpha = SubKey("LCM", ins("lcm("))),
     ),
 
-    // 第 9 排：1 2 3 + −
+    // 第 9 排：1 2 3 + −（参照图：STAT · CMPLX · DISTR · Pol/Ceil · Rec/Floor）
     listOf(
-        Key("1", KeyKind.DIGIT, ins("1"), shift = SubKey("Ran#", KeyAction.RandomInsert)),
-        Key("2", KeyKind.DIGIT, ins("2"), shift = SubKey("\u03C0", ins("\u03C0"))),
-        Key("3", KeyKind.DIGIT, ins("3"), shift = SubKey("e", ins("e"))),
-        Key("+", KeyKind.OP, ins("+"), shift = SubKey("PreAns", ins("PreAns"))),
-        Key("\u2212", KeyKind.OP, ins("\u2212"), shift = SubKey("History", KeyAction.OpenHistory)),
+        Key("1", KeyKind.DIGIT, ins("1"), shift = SubKey("STAT", KeyAction.GoScreen(Screen.STAT))),
+        Key("2", KeyKind.DIGIT, ins("2"), shift = SubKey("CMPLX", KeyAction.GoScreen(Screen.CMPLX))),
+        Key("3", KeyKind.DIGIT, ins("3"), shift = SubKey("DISTR", KeyAction.GoScreen(Screen.DISTR))),
+        Key("+", KeyKind.OP, ins("+"),
+            shift = SubKey("Pol", KeyAction.OpenFunc(FuncKind.POL)),
+            alpha = SubKey("Ceil", ins("ceil("))),
+        Key("\u2212", KeyKind.OP, ins("\u2212"),
+            shift = SubKey("Rec", KeyAction.OpenFunc(FuncKind.REC)),
+            alpha = SubKey("Floor", ins("floor("))),
     ),
 
-    // 第 10 排：0 . Exp Ans =
+    // 第 10 排：0 . Exp Ans =（参照图：COPY/PASTE · Ran#/RanInt · π/e · PreAns · History）
     listOf(
-        Key("0", KeyKind.DIGIT, ins("0")),
-        Key(".", KeyKind.DIGIT, ins(".")),
+        Key("0", KeyKind.DIGIT, ins("0"),
+            shift = SubKey("COPY", KeyAction.CopyExpr),
+            alpha = SubKey("PASTE", KeyAction.PasteExpr)),
+        Key(".", KeyKind.DIGIT, ins("."),
+            shift = SubKey("Ran#", KeyAction.RandomInsert),
+            alpha = SubKey("RanInt", KeyAction.OpenFunc(FuncKind.RANINT))),
         Key("Exp", KeyKind.FUNC, ins("\u00D710^"), labelScale = 0.8f,
-            shift = SubKey("RanInt", KeyAction.OpenFunc(FuncKind.RANINT))),
+            shift = SubKey("\u03C0", ins("\u03C0")),
+            alpha = SubKey("e", ins("e"))),
         Key("Ans", KeyKind.MEM, ins("Ans"), labelScale = 0.8f,
-            alpha = SubKey("x", ins("x")), shift = SubKey("y", ins("y"))),
-        Key("=", KeyKind.EQUALS, KeyAction.Equals, alpha = SubKey("=", ins("="))),
+            alpha = SubKey("PreAns", ins("PreAns"))),
+        Key("=", KeyKind.EQUALS, KeyAction.Equals,
+            shift = SubKey("History", KeyAction.OpenHistory)),
     ),
 )

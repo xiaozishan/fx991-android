@@ -30,6 +30,7 @@ object FuncHelp {
     const val CAT_LOG = "对数与指数"
     const val CAT_ROOT = "根式与幂"
     const val CAT_COMB = "排列组合"
+    const val CAT_INT = "整数与取整"
     const val CAT_CONST = "常量与寄存器"
     const val CAT_UNIFIED = "矩阵 / 向量（主行可用）"
     const val CAT_STAT = "统计 / 分布（主行可调）"
@@ -44,11 +45,13 @@ object FuncHelp {
         FuncHelpEntry("sin", CAT_TRIG, "sin(θ)", "正弦；θ 按当前角度制（DEG/RAD/GRAD）", "sin(", "sin(30)"),
         FuncHelpEntry("cos", CAT_TRIG, "cos(θ)", "余弦；θ 按当前角度制", "cos(", "cos(60)"),
         FuncHelpEntry("tan", CAT_TRIG, "tan(θ)", "正切；θ 按当前角度制", "tan(", "tan(45)"),
+        FuncHelpEntry("cot", CAT_TRIG, "cot(θ)", "余切 = cos/sin（批次 K4，ENG 的 ALPHA 层）", "cot(", "cot(30)"),
 
         // ---- 反三角 ----
         FuncHelpEntry("sin⁻¹", CAT_INVTRIG, "sin⁻¹(x)", "反正弦，定义域 [−1, 1]，按当前角度制输出", "sin\u207B\u00B9(", "sin\u207B\u00B9(0.5)"),
         FuncHelpEntry("cos⁻¹", CAT_INVTRIG, "cos⁻¹(x)", "反余弦，定义域 [−1, 1]", "cos\u207B\u00B9(", "cos\u207B\u00B9(0.5)"),
         FuncHelpEntry("tan⁻¹", CAT_INVTRIG, "tan⁻¹(x)", "反正切", "tan\u207B\u00B9(", "tan\u207B\u00B9(1)"),
+        FuncHelpEntry("cot⁻¹", CAT_INVTRIG, "acot(x)", "反余切，值域 (0, 180°)（批次 K4，( 的 ALPHA 层）", "acot(", "acot(1)"),
 
         // ---- 双曲与反双曲 ----
         FuncHelpEntry("sinh", CAT_HYPER, "sinh(x)", "双曲正弦", "sinh(", "sinh(1)"),
@@ -81,6 +84,13 @@ object FuncHelp {
         FuncHelpEntry("!", CAT_COMB, "x!", "阶乘（非负整数）", "!", "5!"),
         FuncHelpEntry("%", CAT_COMB, "x%", "百分号；A + B% = A + A·B/100", "%", "200+10%"),
 
+        // ---- 整数与取整（批次 K4）----
+        FuncHelpEntry("GCD", CAT_INT, "gcd(a, b)", "最大公约数（整数，允许负数；× 的 ALPHA 层）", "gcd(", "gcd(12, 18)"),
+        FuncHelpEntry("LCM", CAT_INT, "lcm(a, b)", "最小公倍数（÷ 的 ALPHA 层）", "lcm(", "lcm(4, 6)"),
+        FuncHelpEntry("mod", CAT_INT, "mod(a, b)", "取模（向下取整式；√x 的 ALPHA 层）", "mod(", "mod(7, 3)"),
+        FuncHelpEntry("Ceil", CAT_INT, "ceil(x)", "向上取整（+ 的 ALPHA 层）", "ceil(", "ceil(2.3)"),
+        FuncHelpEntry("Floor", CAT_INT, "floor(x)", "向下取整（− 的 ALPHA 层）", "floor(", "floor(2.7)"),
+
         // ---- 常量与寄存器 ----
         FuncHelpEntry("π", CAT_CONST, "π", "圆周率", "\u03C0", "\u03C0"),
         FuncHelpEntry("e", CAT_CONST, "e", "自然常数", "e", "e"),
@@ -89,6 +99,7 @@ object FuncHelp {
         FuncHelpEntry("M", CAT_CONST, "M", "独立存储器（M+ / M− / MRC）", "M", "M"),
         FuncHelpEntry("变量 A–F", CAT_CONST, "A .. F", "STO 存入的变量，可在表达式里直接引用", "A", "A+B"),
         FuncHelpEntry("∠", CAT_CONST, "r∠θ", "极坐标运算符（可多个）：9∠60+5∠6 就是两个复数相加", "\u2220", "2"),
+        FuncHelpEntry("∞", CAT_CONST, "∞", "正无穷符号（9 的 ALPHA 层；1÷∞→0，单独求值报数学错误）", "\u221E", "1\u00F7\u221E"),
         FuncHelpEntry("Σ", CAT_CONST, "Σ(f(x), x, a, b)", "求和（数值功能对话框）", "\u03A3", "1"),
 
         // ---- 统一输入面：矩阵 / 向量（主行可直接用，无需切模式）----
@@ -128,7 +139,7 @@ object FuncHelp {
         FuncHelpEntry("fourier", CAT_FOURIER, "fourier(f(x), a, b, n)", "傅里叶级数展开：区间 [a,b] 上前 n 项 a0/an/bn 与部分和；奇偶自动识别；弧度制", "fourier(", "fourier(1, 0, 1, 1)"),
 
         // ---- 批次 G：复变函数 ----
-        FuncHelpEntry("i", CAT_CPLXF, "i", "虚数单位：exp(i*π) = −1；复函数取主值分支（辐角 ∈ (−π, π]）", "i", "i"),
+        FuncHelpEntry("i", CAT_CPLXF, "i", "虚数单位（ENG 的 SHIFT 层）：exp(i*π) = −1；复函数取主值分支（辐角 ∈ (−π, π]）", "i", "i"),
         FuncHelpEntry("conj", CAT_CPLXF, "conj(z)", "复共轭（实数时不变）；模 abs(z)、辐角见 CMPLX 模式", "conj(", "conj(2)"),
         FuncHelpEntry("res", CAT_CPLXF, "res(f(z), z0)", "留数：自动判定极点阶数（1–8），可去奇点明说，本性奇点拒绝", "res(", "res(1/z, 0)"),
         FuncHelpEntry("cint", CAT_CPLXF, "cint(f(z), p1, …)", "留数定理围道积分 ∮f dz = 2πi·ΣRes（列出围道内全部极点）", "cint(", "cint(1/z, 0)"),

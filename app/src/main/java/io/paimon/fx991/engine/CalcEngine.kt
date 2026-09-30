@@ -10,9 +10,11 @@ import kotlin.math.acosh
 import kotlin.math.asin
 import kotlin.math.asinh
 import kotlin.math.atan
+import kotlin.math.atan2
 import kotlin.math.atanh
 import kotlin.math.cos
 import kotlin.math.cosh
+import kotlin.math.ceil
 import kotlin.math.exp
 import kotlin.math.floor
 import kotlin.math.ln
@@ -97,6 +99,8 @@ internal class Lexer(private val src: String) {
                 c == ',' -> { out.add(Token(Tok.COMMA, ",")); i++ }
                 c == '\u2220' -> { out.add(Token(Tok.ANGLE, "\u2220")); i++ }
                 c == '\u00B7' -> { out.add(Token(Tok.DOT, "\u00B7")); i++ }
+                // 批次 K4：∞ 无穷符号（Limit 等场景插入；按 IDENT 走，parser 映射为正无穷）
+                c == '\u221E' -> { out.add(Token(Tok.IDENT, "\u221E")); i++ }
                 // 批次 G：导数撇号 f'(x)（′ 与 ' 等价）
                 c == '\'' || c == '\u2032' -> { out.add(Token(Tok.PRIME, "'")); i++ }
                 c == CH_SQRT -> { out.add(Token(Tok.SQRT, "\u221A")); i++ }
@@ -177,7 +181,6 @@ internal sealed class Node {
 
     /** 双参数函数：logb(底, 真数) / root(次数, 被开方数) / npr(n, r) / ncr(n, r) */
     class Fn2(val name: String, val a: Node, val b: Node) : Node()
-
     // ---- 统一输入面（REFERENCE 第 6 条）----
 
     /** 极坐标 `r∠θ`：真运算符，可多个、有优先级；结果为复数 */
@@ -206,13 +209,17 @@ internal sealed class Node {
 
 internal val FUNC_NAMES = setOf(
     "sin", "cos", "tan", "asin", "acos", "atan", "log", "ln", "exp", "sqrt",
-    "sinh", "cosh", "tanh", "asinh", "acosh", "atanh", "cbrt", "abs", "conj"
+    "sinh", "cosh", "tanh", "asinh", "acosh", "atanh", "cbrt", "abs", "conj",
+    // 批次 K4：余切 / 反余切 / 向上取整 / 向下取整
+    "cot", "acot", "ceil", "floor"
 )
 
 /** STO 变量名（A–F），大小写不敏感只在单字母且为大写时生效 */
 internal val VAR_NAMES = setOf("A", "B", "C", "D", "E", "F")
 
-internal val FUNC2_NAMES = setOf("logb", "root", "npr", "ncr")
+internal val FUNC2_NAMES = setOf("logb", "root", "npr", "ncr",
+    // 批次 K4：最大公约 / 最小公倍 / 取模
+    "gcd", "lcm", "mod")
 
 /** 矩阵单参函数：det(MatA) / inv(MatA) / trn(MatA) */
 internal val MAT_FUNC_NAMES = setOf("det", "inv", "trn")
@@ -379,6 +386,8 @@ internal class Parser(private val ts: List<Token>, private val extraIdents: Set<
         when (text) {
             "\u03C0", "pi", "PI" -> return Node.Num(Math.PI)
             "e" -> return Node.Num(Math.E)
+            // 批次 K4：∞ = 正无穷（参与运算如 1÷∞→0；单独求值报数学错误，同参考机）
+            "\u221E" -> return Node.Num(Double.POSITIVE_INFINITY)
             "Ans" -> return Node.AnsRef
             "PreAns" -> return Node.PreAnsRef
             "M" -> return Node.MemRef
@@ -553,6 +562,22 @@ internal object MathOps {
             }
             "abs" -> abs(x)
             "conj" -> x   // 实数的共轭是它自己；复数走 ComplexFunc
+            // ---- 批次 K4 ----
+            "cot" -> {
+                // 余切 = cos/sin；sin=0 处（0°/180°…）数学错误
+                if (mode != AngleMode.RAD) {
+                    val half = if (mode == AngleMode.DEG) 180.0 else 200.0
+                    val m = ((x % half) + half) % half
+                    if (m < 1e-9 || abs(m - half) < 1e-9) throw CalcMathError("数学错误")
+                }
+                val r0 = toRad(mode, x)
+                val s = sin(r0)
+                if (abs(s) < 1e-15) throw CalcMathError("数学错误")
+                clean(cos(r0) / s)
+            }
+            "acot" -> fromRad(mode, atan2(1.0, x))   // 值域 (0, 180°)，x=0 → 90°
+            "ceil" -> ceil(x)
+            "floor" -> floor(x)
             else -> throw CalcSyntaxError("语法错误")
         }
         if (r.isNaN() || r.isInfinite()) throw CalcMathError("数学错误")
@@ -576,6 +601,17 @@ internal object MathOps {
             }
             "npr" -> NumericOps.nPr(countOf(a), countOf(b)).toDouble()
             "ncr" -> NumericOps.nCr(countOf(a), countOf(b)).toDouble()
+            // ---- 批次 K4 ----
+            "gcd" -> intOf(a).gcd(intOf(b)).abs().toDouble()
+            "lcm" -> {
+                val ga = intOf(a); val gb = intOf(b)
+                if (ga.signum() == 0 || gb.signum() == 0) throw CalcMathError("数学错误")
+                ga.divide(ga.gcd(gb)).multiply(gb).abs().toDouble()
+            }
+            "mod" -> {
+                if (b == 0.0) throw CalcMathError("数学错误")
+                a - b * floor(a / b)   // 向下取整式取模（结果与除数同号）
+            }
             else -> throw CalcSyntaxError("语法错误")
         }
         if (r.isNaN() || r.isInfinite()) throw CalcMathError("数学错误")
@@ -585,6 +621,12 @@ internal object MathOps {
     private fun countOf(v: Double): Long {
         if (v != floor(v) || v < 0.0 || v > 1.0e9) throw CalcMathError("数学错误")
         return v.toLong()
+    }
+
+    /** 批次 K4：gcd / lcm 的整数参数（允许负数，|v| ≤ 1e15 保证 toLong 不溢） */
+    private fun intOf(v: Double): BigInteger {
+        if (v != floor(v) || abs(v) > 1.0e15) throw CalcMathError("数学错误")
+        return BigInteger.valueOf(v.toLong())
     }
 }
 
@@ -754,6 +796,21 @@ internal class ValueEvaluator(
                 ) {
                     val big = if (name == "npr") NumericOps.nPr(ea.num.toLong(), eb.num.toLong())
                     else NumericOps.nCr(ea.num.toLong(), eb.num.toLong())
+                    if (big.bitLength() <= 128) return Value.of(Rational.of(big, BigInteger.ONE))
+                    return Value.Floating(big.toDouble())
+                }
+            }
+            // 批次 K4：gcd / lcm 整数精确轨（BigInteger 内建 gcd）
+            "gcd", "lcm" -> {
+                if (ea != null && eb != null && ea.isInteger && eb.isInteger &&
+                    ea.num.bitLength() < 62 && eb.num.bitLength() < 62
+                ) {
+                    val g = ea.num.gcd(eb.num)
+                    val big = if (name == "gcd") g.abs()
+                    else {
+                        if (ea.num.signum() == 0 || eb.num.signum() == 0) throw CalcMathError("数学错误")
+                        ea.num.divide(g).multiply(eb.num).abs()
+                    }
                     if (big.bitLength() <= 128) return Value.of(Rational.of(big, BigInteger.ONE))
                     return Value.Floating(big.toDouble())
                 }

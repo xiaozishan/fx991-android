@@ -302,7 +302,7 @@ private fun ModeMenuOverlay(vm: CalcViewModel) {
         Spacer(Modifier.height(4.dp))
         Text(
             "批次 D 新增：方程 EQN · 基数换算 BASE-N · 函数表 TABLE · 比例 RATIO；" +
-                "批次 C：复数 / 矩阵 / 向量 / 统计 / 分布 / 函数帮助（SHIFT 层 7 / 8 / 9 / 4 / 5 / 6 键直达）",
+                "批次 C：复数 / 矩阵 / 向量 / 统计 / 分布 / 函数帮助（SHIFT 层 2 / 4 / 5 / 1 / 3 / 6 键直达）",
             color = c.keyNeutralInk.copy(alpha = 0.65f),
             fontSize = 11.sp,
         )
@@ -637,18 +637,19 @@ private fun HelpPanel(vm: CalcViewModel) {
         BodyText("°′″：度分秒 ⇄ 十进制度；只填“度”时按十进制度转度分秒，填了分/秒则按 60 进制合成度。")
         BodyText("极坐标：用 ∠ 直接输入，例如 2∠60 得到直角坐标 1 + 1.732050808i；再按 S⇔D 可切回 r∠θ。")
         BodyText("统一输入面（不需要切模式）：主行可直接写 MatA×MatB、det(MatA)、inv(MatA)、trn(MatA)、VctA·VctB、cross(VctA,VctB)、abs(VctA)、mean(1,2,3)、sd(…)、ssd(…)、normcdf(0,1,1)、binompdf(10,3,0.5) 等；∠ 是真运算符，可以多个（9∠60+5∠6）。")
-        BodyText("主行求解：含未知量（x/y/z）且带 = 时按 = 即解方程。如 2x+3=7、x²-3x+2=0（给全部根含复根）、sin(x)=0.5（多点扫描多个根）、2x+y=5, x-y=1（方程组，, 或 ; 分隔）。无解 / 无穷多解会明确告知。等号用 ALPHA + = 输入。")
+        BodyText("主行求解：含未知量（x/y/z）且带 = 时按 = 即解方程。如 2x+3=7、x²-3x+2=0（给全部根含复根）、sin(x)=0.5（多点扫描多个根）、2x+y=5, x-y=1（方程组，, 或 ; 分隔）。无解 / 无穷多解会明确告知。等号用 ALPHA + CALC 输入。")
         BodyText("方程模式（MODE 菜单）：多项式方程 2 / 3 / 4 次（含复根，能精确给精确根）；联立线性方程组 2~4 元（高斯消元 + 精确分数，无解 / 无穷多解会明说）。点解可带回主行。")
         BodyText("基数换算 BASE-N（MODE 菜单）：DEC / HEX / BIN / OCT 互转，AND / OR / XOR / XNOR / NOT / NEG 位运算，字长 16 / 32 / 64，负数按补码显示。")
         BodyText("函数表 TABLE（MODE 菜单）：输 f(x) 与起值 / 终值 / 步长出数值表，可开 g(x) 双函数对照，8 行一页翻页。")
         BodyText("比例 RATIO（MODE 菜单）：a:b = c:x 与 a:b = x:d 两种形式，给精确分数解。")
-        BodyText("Pol / Rec（× ÷ 的 SHIFT 层）：Pol(x,y) 给 r、θ；Rec(r,θ) 给 x、y；角度制跟随设置。")
-        BodyText("STO（RCL 的 SHIFT 层）：把当前结果存入 A–F / x / y / M，或把变量插入表达式。")
+        BodyText("Pol / Rec（+ − 的 SHIFT 层）：Pol(x,y) 给 r、θ；Rec(r,θ) 给 x、y；角度制跟随设置。")
+        BodyText("STO（RCL 的 SHIFT 层）：把当前结果存入 A–F / x / y / M，或把变量插入表达式；CLRv（RCL 的 ALPHA 层）清空全部变量；x⇄y（S⇔D 的 SHIFT 层）交换 x 与 y。")
         BodyText("ENG（工程记数）：按一下切到指数为 3 倍数的显示，再按回到普通；数字格式也可在设置里切。")
-        BodyText("CONST / CONV / SI（ENG、(、) 的 SHIFT 层）：科学常数表 · 单位换算（含温度）· SI 前缀换算。")
-        BodyText("Ran# / RanInt（1 与 Exp 的 SHIFT 层）：Ran# 插入 0–1 随机数；RanInt 指定上下界与次数。")
-        BodyText("PreAns（+ 的 SHIFT 层）：上上次结果；History（− 的 SHIFT 层）：历史记录页，可回填 / 单条删除。")
-        BodyText("CLR ALL（M+ 的 SHIFT 层）：全清（历史 / 变量 / M / 设置）——会先弹确认框。")
+        BodyText("CONST / CONV / SI（7 / 8 键的 SHIFT、ALPHA 层）：科学常数表 · 单位换算（含温度）· SI 前缀换算；Limit / ∞ 在 9 键。")
+        BodyText("Ran# / RanInt（. 键的 SHIFT / ALPHA 层）：Ran# 插入 0–1 随机数；RanInt 指定上下界与次数。")
+        BodyText("COPY / PASTE（0 键的 SHIFT / ALPHA 层）：复制 / 粘贴主行表达式；PreAns（Ans 的 ALPHA 层）：上上次结果；History（= 的 SHIFT 层）：历史记录页，可回填 / 单条删除。")
+        BodyText("CLR ALL（AC 的 SHIFT 层）：全清（历史 / 变量 / M / 设置）——会先弹确认框；M− 在 M+ 的 SHIFT 层。")
+        BodyText("整数与取整：gcd( / lcm(（× ÷ 的 ALPHA 层）· ceil( / floor(（+ − 的 ALPHA 层）· mod(（√x 的 ALPHA 层）；余切 Cot / Cot⁻¹ 在 ENG / ( 的 ALPHA 层；虚数单位 i 在 ENG 的 SHIFT 层。")
         BodyText("函数写法：logb(底,真数) · root(次数,被开方) · cbrt(x) · abs(x) · npr(n,r) · ncr(n,r) · sinh/cosh/tanh 与 asinh/acosh/atanh · 10^ · exp(")
         BodyText("SHIFT 层：键帽上橙字；2nd 与 SHIFT 等价。ALPHA 层为紫字。")
     }
@@ -1243,13 +1244,16 @@ private fun KeyCapButton(key: Key, modifier: Modifier, onClick: () -> Unit) {
             modifier = Modifier.fillMaxWidth(),
         ) {
             if (key.shift != null || key.alpha != null) {
+                // 批次 K4：橙键（DANGER）上的 SHIFT 橙字会融进底色，改用键面墨色保证可读
+                val shiftInk = if (key.kind == KeyKind.DANGER) fg else ShiftOrange
+                val alphaInk = if (key.kind == KeyKind.DANGER) fg else AlphaPurple
                 Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                     key.shift?.let {
-                        Text(it.label, color = ShiftOrange, fontSize = 7.5.sp, maxLines = 1,
+                        Text(it.label, color = shiftInk, fontSize = 7.5.sp, maxLines = 1,
                             fontWeight = FontWeight.Bold)
                     }
                     key.alpha?.let {
-                        Text(it.label, color = AlphaPurple, fontSize = 7.5.sp, maxLines = 1,
+                        Text(it.label, color = alphaInk, fontSize = 7.5.sp, maxLines = 1,
                             fontWeight = FontWeight.Bold)
                     }
                 }

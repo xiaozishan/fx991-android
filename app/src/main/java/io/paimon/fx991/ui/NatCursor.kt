@@ -25,6 +25,8 @@ object CursorModel {
         "cbrt(", "abs(", "fourier(", "cint(", "conj(", "res(",
         "sin(", "cos(", "tan(", "logb(", "log(", "ln(",
         "root(", "npr(", "ncr(", "exp(",
+        // 批次 K4
+        "acot(", "cot(", "ceil(", "floor(", "gcd(", "lcm(", "mod(",
         "\u221A(",
         "sin\u207B\u00B9", "cos\u207B\u00B9", "tan\u207B\u00B9",
         "\u00D710^", "PreAns", "10^", "Ans", "\u207B\u00B9",

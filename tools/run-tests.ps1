@@ -29,7 +29,8 @@ $suites = @(
     @{ name = "PhotoAiTest";  file = "tools\PhotoAiTest.java";  out = "$env:TEMP\fx991-t12" },
     @{ name = "OcrTextTest";  file = "tools\OcrTextTest.java";  out = "$env:TEMP\fx991-t13" },
     @{ name = "GeoCplxFourierTest"; file = "tools\GeoCplxFourierTest.java"; out = "$env:TEMP\fx991-t14" },
-    @{ name = "CursorTest";  file = "tools\CursorTest.java";  out = "$env:TEMP\fx991-t15" }
+    @{ name = "CursorTest";  file = "tools\CursorTest.java";  out = "$env:TEMP\fx991-t15" },
+    @{ name = "KeymapTest";  file = "tools\KeymapTest.java";  out = "$env:TEMP\fx991-t16" }
 )
 
 $failed = 0

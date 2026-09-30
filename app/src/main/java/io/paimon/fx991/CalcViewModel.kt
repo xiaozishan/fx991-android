@@ -361,6 +361,11 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
             KeyAction.ClrAll -> requestClearAll()
             KeyAction.EngToggle -> toggleEng()
             KeyAction.RandomInsert -> insertRandom()
+            // 批次 K4：COPY / PASTE / CLRv / x⇄y
+            KeyAction.CopyExpr -> copyExpr()
+            KeyAction.PasteExpr -> pasteExpr()
+            KeyAction.ClrVars -> clearVars()
+            KeyAction.SwapXY -> swapXY()
             is KeyAction.GoScreen -> goto(action.screen)
             KeyAction.Shift, KeyAction.Alpha -> Unit
             is KeyAction.Insert -> insert(action.text)
@@ -753,6 +758,48 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
         } catch (_: Exception) {
             ""
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // 批次 K4：COPY / PASTE / CLRv / x⇄y
+    // -----------------------------------------------------------------------
+
+    /** 表达式剪贴板（COPY / PASTE） */
+    private var exprClipboard = ""
+
+    /** COPY：复制主行表达式；主行为空时复制当前结果文本 */
+    private fun copyExpr() {
+        val src = if (expression.isNotBlank()) expression else resultText
+        if (src.isBlank()) return
+        exprClipboard = src
+        storeMessage = "已复制：$src"
+    }
+
+    /** PASTE：把剪贴板内容插到光标处 */
+    private fun pasteExpr() {
+        if (exprClipboard.isBlank()) {
+            storeMessage = "剪贴板为空（先用 SHIFT+0 复制）"
+            return
+        }
+        insert(exprClipboard)
+    }
+
+    /** CLRv：清空 STO 变量（A–F / x / y）；M 与 Ans 不动 */
+    private fun clearVars() {
+        registers.clearAll()
+        variables = registers.snapshot()
+        storeMessage = "变量已清除（A–F / x / y）"
+    }
+
+    /** x⇄y：交换 x 与 y 的值 */
+    private fun swapXY() {
+        val xv = registers.get("x") ?: 0.0
+        val yv = registers.get("y") ?: 0.0
+        registers.store("x", yv)
+        registers.store("y", xv)
+        variables = registers.snapshot()
+        storeMessage = "x⇄y：x=${formatNumber(yv)}，y=${formatNumber(xv)}"
+        refreshPreview()
     }
 
     private fun memoryOp(sign: Double) {

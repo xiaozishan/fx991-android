@@ -1,4 +1,4 @@
-# 科学计算器（自然书写 LCD 复刻）· v1.8.0-cursor
+# 科学计算器（自然书写 LCD 复刻）· v1.9.0-keymap
 
 Android 科学计算器（Kotlin + Jetpack Compose，界面交互参考一台科学计算器手机 App）。
 **不含任何品牌厂商的商标、logo、字体或官方图片资源** —— 全部 UI 与图标由代码绘制。
@@ -8,12 +8,21 @@ Android 科学计算器（Kotlin + Jetpack Compose，界面交互参考一台科
 | 项 | 值 |
 |:--|:--|
 | 绝对路径 | `C:\Users\Administrator\.openclaw\workspace\projects\casio-calc-android\app\build\outputs\apk\debug\app-debug.apk` |
-| 大小 | 55,158,922 bytes（≈ 52.6 MB，`assembleDebug -PallAbi` 四 ABI；默认单 ABI arm64 约 25 MB） |
-| SHA-256 | `E1F9E93DD90816AAC206BE5E04701DD52B1AA54E1A56C1E78A663775E991A24B` |
-| 包名 / 版本 | `io.paimon.fx991` · `1.8.0-cursor` |
+| 大小 | 55,175,306 bytes（≈ 52.6 MB，`assembleDebug -PallAbi` 四 ABI；默认单 ABI arm64 约 25 MB） |
+| SHA-256 | `A88017FE1056469FDB1208434AD3DF875FF4CD67B3B2C444E26D263F543B934C`（以当次构建为准） |
+| 包名 / 版本 | `io.paimon.fx991` · `1.9.0-keymap` |
 | 依赖 | 零新增第三方依赖（仍只有批次 F 的 ML Kit 两个 artifact）；未新增图片 / 字体资源 |
 
-## 本批（K3：可见光标 + 二级界面自然输入）
+## 本批（K4：键位表逐键对齐参照截图）
+
+- SHIFT / ALPHA 层整体重排（原表错位一行）：CONST→7 · CONV/SI→8 · Limit/∞→9 · MATRIX/VECTOR/FUNC HELP→4/5/6 ·
+  STAT/CMPLX/DISTR→1/2/3 · nPr/GCD→× · nCr/LCM→÷ · Pol/Ceil→+ · Rec/Floor→− · COPY/PASTE→0 · Ran#/RanInt→. ·
+  π/e→Exp · PreAns→Ans · History→= · STO/CLRv→RCL · i/Cot→ENG · %/Cot⁻¹→( · ,/x→) · x⇄y/y→S⇔D · M−/m→M+ · CLR ALL→AC。
+- 新功能：cot / acot / gcd / lcm / mod / ceil / floor 进引擎（精确轨含 gcd/lcm 整数精确），∞ 字面量，
+  COPY/PASTE（表达式剪贴板）、CLRv（清变量）、x⇄y（交换 x/y）；键位回归 `tools/KeymapTest.java`（310 条）。
+- 回归 **1332/1332** 全过（1022 + 310）；`a/b` 主字改为 `x/y`；橙键上的层字改用键面墨色保证可读。
+
+## 上一批（K3：可见光标 + 二级界面自然输入）
 
 **A. 主行与自然字段都有可见光标**
 - 光标 = 表达式字符串偏移量（`CursorModel`，纯 Kotlin 可 JVM 测）：左右移动按原子跳格
