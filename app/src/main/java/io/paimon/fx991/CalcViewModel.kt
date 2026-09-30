@@ -1,11 +1,16 @@
 package io.paimon.fx991
 
+import android.app.Application
+import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
 import io.paimon.fx991.engine.AngleMode
+import io.paimon.fx991.engine.ApiConfig
+import io.paimon.fx991.engine.ApiPreset
 import io.paimon.fx991.engine.CalcEngine
 import io.paimon.fx991.engine.CalcMathError
 import io.paimon.fx991.engine.CalcSyntaxError
@@ -16,6 +21,7 @@ import io.paimon.fx991.engine.MatrixStore
 import io.paimon.fx991.engine.NumberNotation
 import io.paimon.fx991.engine.NumericError
 import io.paimon.fx991.engine.NumericOps
+import io.paimon.fx991.engine.PhotoNet
 import io.paimon.fx991.engine.PolarForm
 import io.paimon.fx991.engine.RandomOps
 import io.paimon.fx991.engine.Registers
@@ -26,6 +32,9 @@ import io.paimon.fx991.engine.Unified
 import io.paimon.fx991.engine.Value
 import io.paimon.fx991.engine.VectorStore
 import io.paimon.fx991.ui.KeyAction
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.math.floor
 
@@ -43,7 +52,7 @@ data class HistoryEntry(val expr: String, val result: String)
     }
 }
 
-class CalcViewModel : ViewModel() {
+class CalcViewModel(app: Application) : AndroidViewModel(app) {
 
     var expression by mutableStateOf("")
         private set
@@ -294,7 +303,8 @@ class CalcViewModel : ViewModel() {
             KeyAction.Settings -> openOverlay(Overlay.SETTINGS)
             KeyAction.More -> openOverlay(Overlay.MORE)
             KeyAction.Pro -> openOverlay(Overlay.PRO)
-            KeyAction.Photo -> openOverlay(Overlay.PHOTO)
+            // 批次 E：拍照键直达真界面（不再是说明页）
+            KeyAction.Photo -> goto(Screen.PHOTO_SOLVE)
             is KeyAction.OpenFunc -> openFunc(action.kind)
             KeyAction.OpenSto -> {
                 storeMessage = ""
@@ -834,7 +844,131 @@ class CalcViewModel : ViewModel() {
         return v.toLong()
     }
 
+    // -----------------------------------------------------------------------
+    // 批次 E：解题 API 配置（用户自由填写；SharedPreferences 明文存储，界面已告知）
+    // -----------------------------------------------------------------------
+
+    private val apiPrefs = app.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    var apiBaseUrl by mutableStateOf(
+        apiPrefs.getString(KEY_API_BASE, ApiConfig.DEFAULT_BASE) ?: ApiConfig.DEFAULT_BASE
+    )
+        private set
+
+    var apiKey by mutableStateOf(apiPrefs.getString(KEY_API_KEY, "") ?: "")
+        private set
+
+    var apiModel by mutableStateOf(
+        apiPrefs.getString(KEY_API_MODEL, ApiConfig.DEFAULT_MODEL) ?: ApiConfig.DEFAULT_MODEL
+    )
+        private set
+
+    /** 超时秒数（输入框是文本，读配置时才转 Int 并收紧到合法区间） */
+    var apiTimeoutText by mutableStateOf(
+        apiPrefs.getInt(KEY_API_TIMEOUT, ApiConfig.DEFAULT_TIMEOUT_SEC).toString()
+    )
+        private set
+
+    /** 测试连接：进行中 / 结果文案（成功失败都是人话） */
+    var apiTestBusy by mutableStateOf(false)
+        private set
+    var apiTestResult by mutableStateOf("")
+        private set
+
+    /** 当前生效的配置（超时文本非法时回落默认，并收紧到 5–180 秒） */
+    fun apiConfig(): ApiConfig = ApiConfig(
+        baseUrl = apiBaseUrl.trim(),
+        apiKey = apiKey.trim(),
+        model = apiModel.trim(),
+        timeoutSec = apiTimeoutText.trim().toIntOrNull() ?: ApiConfig.DEFAULT_TIMEOUT_SEC,
+    ).clamped()
+
+    /** 拍照解题可用前提：三项都填了 */
+    fun apiReady(): Boolean = apiConfig().isComplete()
+
+    fun updateApiBase(v: String) {
+        apiBaseUrl = v
+        persistApi()
+    }
+
+    fun updateApiKey(v: String) {
+        apiKey = v
+        persistApi()
+    }
+
+    fun updateApiModel(v: String) {
+        apiModel = v
+        persistApi()
+    }
+
+    fun updateApiTimeout(v: String) {
+        apiTimeoutText = v.filter { it.isDigit() }.take(3)
+        persistApi()
+    }
+
+    /** 预设一键填充：只填 Base URL + 模型名，Key 永远不动 */
+    fun applyApiPreset(p: ApiPreset) {
+        apiBaseUrl = p.baseUrl
+        apiModel = p.model
+        persistApi()
+    }
+
+    private fun persistApi() {
+        apiPrefs.edit()
+            .putString(KEY_API_BASE, apiBaseUrl.trim())
+            .putString(KEY_API_KEY, apiKey.trim())
+            .putString(KEY_API_MODEL, apiModel.trim())
+            .putInt(
+                KEY_API_TIMEOUT,
+                (apiTimeoutText.trim().toIntOrNull() ?: ApiConfig.DEFAULT_TIMEOUT_SEC)
+                    .coerceIn(ApiConfig.MIN_TIMEOUT_SEC, ApiConfig.MAX_TIMEOUT_SEC),
+            )
+            .apply()
+        apiTestResult = ""
+    }
+
+    /** 「测试连接」：发一个最小请求（协程 IO，不碰主线程） */
+    fun testApiConnection() {
+        if (apiTestBusy) return
+        apiTestBusy = true
+        apiTestResult = ""
+        val cfg = apiConfig()
+        viewModelScope.launch {
+            val r = withContext(Dispatchers.IO) { PhotoNet.testConnection(cfg) }
+            apiTestResult = r
+            apiTestBusy = false
+        }
+    }
+
+    /**
+     * 拍照解题回填：把模型给的表达式插进主计算行并立即求值（复用主行解题管线），
+     * 模型的解释文字显示在结果区附注里。
+     */
+    fun applyPhotoExpr(expr: String, explain: String) {
+        goto(Screen.CALC)
+        justEvaluated = false
+        expression = expr
+        resultText = ""
+        previewText = ""
+        isError = false
+        solutionItems = emptyList()
+        resultNote = ""
+        lastComplex = null
+        polarFormShown = false
+        evaluateNow()
+        if (explain.isNotBlank() && !isError) {
+            resultNote = if (resultNote.isBlank()) explain else "$resultNote ｜ $explain"
+        }
+    }
+
     private companion object {
         const val ANGLE_SIGN = '\u2220'
+
+        // ---- 批次 E：解题 API 配置持久化（SharedPreferences 明文，界面有告知） ----
+        const val PREFS_NAME = "fx991_api_config"
+        const val KEY_API_BASE = "api_base_url"
+        const val KEY_API_KEY = "api_key"
+        const val KEY_API_MODEL = "api_model"
+        const val KEY_API_TIMEOUT = "api_timeout_sec"
     }
 }

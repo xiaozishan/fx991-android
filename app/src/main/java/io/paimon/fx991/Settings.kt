@@ -140,7 +140,7 @@ fun newFuncDialog(kind: FuncKind, seed: String): FuncDialog = FuncDialog(kind).a
 // ---------------------------------------------------------------------------
 
 enum class Overlay {
-    NONE, MODE, SETTINGS, MORE, PRO, PHOTO, HISTORY, FUNC, HELP,
+    NONE, MODE, SETTINGS, MORE, PRO, HISTORY, FUNC, HELP,
 
     // ---- 批次 B ----
     /** STO 变量存入 / 插入 */
@@ -151,8 +151,12 @@ enum class Overlay {
     CONV,
     /** SI 前缀换算 */
     SI,
+    // ---- 批次 D ----
     /** CLR ALL 确认对话框 */
     CLRCONFIRM,
+
+    // ---- 批次 E ----
+    //（原 PHOTO 覆盖层已删：拍照键现在直达 Screen.PHOTO_SOLVE 真界面）
 }
 
 /** MODE 菜单条目（批次 D 后全部模式都有真入口） */

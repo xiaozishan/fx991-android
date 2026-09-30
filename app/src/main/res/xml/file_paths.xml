@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 拍照解题：相机照片落在缓存目录 photo/ 下，拍完即读即压缩 -->
+<paths>
+    <cache-path name="photo" path="photo/" />
+</paths>

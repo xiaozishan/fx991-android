@@ -1,4 +1,4 @@
-# 科学计算器（自然书写 LCD 复刻）· v2 + 批次 A + 批次 B + 批次 C + 系统栏避让 + 统一输入面 + 批次 D
+# 科学计算器（自然书写 LCD 复刻）· v2 + 批次 A + 批次 B + 批次 C + 系统栏避让 + 统一输入面 + 批次 D + 批次 E（拍照解题 + API 自由配置）
 
 Android 科学计算器。界面与交互参考一台科学计算器手机 App（键位、配色、自然书写 LCD），
 **不含任何品牌厂商的商标、logo、字体或官方图片资源** —— 全部 UI 由 Jetpack Compose 手写绘制，
@@ -10,14 +10,22 @@ Android 科学计算器。界面与交互参考一台科学计算器手机 App�
 app/build/outputs/apk/debug/app-debug.apk
 ```
 
-本批（**批次 D：补齐最后 4 个模式**）交付件：
+本批（**批次 E：拍照解题 + 解题 API 自由配置**）交付件：
 
 | 项 | 值 |
 |:--|:--|
 | 绝对路径 | `C:\Users\Administrator\.openclaw\workspace\projects\casio-calc-android\app\build\outputs\apk\debug\app-debug.apk` |
-| 大小 | 10,205,383 bytes（≈ 9.73 MB，`assembleDebug`） |
+| 大小 | 10,263,864 bytes（≈ 9.79 MB，`assembleDebug`） |
+| SHA-256 | `CF1D36E38558CC9BE22ED49D3C79858E746B3B3960904EBB737BB8DDF8441F32` |
+| 包名 / 版本 | `io.paimon.fx991` · versionCode 1 / versionName 1.0.0（应用内版本串 `1.5.0-photoai`） |
+
+上一批（**批次 D：补齐最后 4 个模式**）交付件：
+
+| 项 | 值 |
+|:--|:--|
+| 大小 | 10,205,383 bytes |
 | SHA-256 | `05FBE6D40B0503AA050841914362584A6D8C2E6644CE2A8E59C717AC16AB0587` |
-| 包名 / 版本 | `io.paimon.fx991` · versionCode 1 / versionName 1.0.0（应用内版本串 `1.4.0-batchD`） |
+| 版本串 | `1.4.0-batchD` |
 
 （自然书写分数堆叠显示修复：10,151,202 bytes，SHA-256 `2C62931A273B17725E0DB2AB23C334157C4338870B8E72D0C2295CC9AAEA0A84`；
 系统栏避让：9,810,612 bytes，SHA-256 `B06B564F718D0E1083534B9696F12557F83E9EB525F2713C688ED3ABE2937B73`；
@@ -381,7 +389,9 @@ tools/
   NatLayoutTest.java          自然书写堆叠显示护栏（16 条：源码护栏 + 结构投影）
   BatchDTest.java             批次 D 回归（87 条：多项式精确根 / Durand-Kerner 数值兜底 / 2~4 元联立 /
                             BASE-N 解析显示补码位运算 / 函数表生成与校验 / 比例精确解）
-  run-tests.ps1             一次跑完十一套
+  PhotoAiTest.java            批次 E 回归（93 条：配置校验/默认值/URL 拼接/JSON 构造转义与多段解析/
+                              EXPR 抽取/表达式规整/缩放与 base64/HTTP 文案/本机 HttpServer 全链路）
+  run-tests.ps1             一次跑完十二套
 ```
 
 ## 表达式引擎
@@ -476,7 +486,9 @@ Value = Exact(Rational) | Floating(Double)
 - 表达式超宽时横向滚动（不再缩字号）
 - 方向键 ← → ↑ ↓ 用于回看历史、中心 ● 等同 `=`（未做文本光标）
 - 分数分子/分母不做千位分组（避免与隐式乘法歧义）
-- 设置项为进程内状态，不落盘持久化
+- 设置项（主题/角度制/精度等）为进程内状态，不落盘持久化；**解题 API 配置例外**（SharedPreferences 明文落盘，界面已告知）
+- 批次 E：拍照解题的照片会压缩后发给**用户自己配置**的服务商；`usesCleartextTraffic="true"` 允许 `http://` 自建地址（本应用无内置云端，唯一网络出口即该 API）
+- 批次 E：JSON 用**手写最小实现**而非 org.json——org.json 在纯 JVM 回归环境不可用，手写版可测且范围等价；DeepSeek 预设的模型是纯文本模型（其官方暂无视觉 API），识图需以服务商实际能力为准
 - STO 变量（A–F / x / y）存的是 **Double**（不保留精确分数），引用时按浮点参与运算
 - CLR ALL **会连同设置一起重置**（主题 / 角度制 / 精度 / 数字格式都回默认）——这是「全清」的语义
 - `Ran#` 在按键时**当场取一个随机字面量**插入表达式（不引入随机函数记号）
@@ -488,7 +500,7 @@ Value = Exact(Rational) | Floating(Double)
 powershell -File tools\run-tests.ps1
 ```
 
-本次（批次 D：四个新模式 + 占位清零）的结果（全部通过，共 **691** 条）：
+本次（批次 E：拍照解题 + API 自由配置）的结果（全部通过，共 **784** 条）：
 
 ```
 EngineTest    pass=70  fail=0     # v1 资产，不许退步
@@ -503,15 +515,15 @@ UnifiedTest   pass=69  fail=0     # 统一输入面 + 主行求解
 NatLayoutTest pass=16  fail=0     # 自然书写堆叠显示护栏（源码护栏 + 结构投影）
 BatchDTest    pass=87  fail=0     # 批次 D：多项式精确根/Durand-Kerner 数值兜底/2~4 元联立精确分数/
                                   #          BASE-N 解析·四进制显示·补码·位运算·字长/函数表生成与校验/比例精确解
+PhotoAiTest   pass=93  fail=0     # 批次 E：配置校验与默认值/URL 拼接/JSON 构造转义与多段解析/EXPR 抽取/
+                                  #          表达式规整/缩放与 base64/HTTP 文案/本机 HttpServer 全链路
 ```
 
-> 604（上一批结束）+ 87（批次 D）= **691** 条，原有各套无一条退步。
+> 691（批次 D 结束）+ 93（批次 E）= **784** 条，原有各套无一条退步。
 
 单跑某套见 `tools/run-tests.ps1` 内的 javac/java 命令行（classpath 用
 `app\build\tmp\kotlin-classes\debug` + kotlin-stdlib 2.0.21）。
 
-> 未接设备 / 模拟器，本轮验证为「编译绿（`assembleDebug`）+ **691 条 JVM 回归全通过** + 产物审计（dex 里已确认
-> EqnMode / BaseN / TableGen / RatioOps 四个新引擎类与「方程 EQN / 基数换算 / 函数表 / 比例 RATIO / 联立方程 /
-> Durand-Kerner / 字长 / 双函数对照 / 1.4.0-batchD」等新文案均在包内，且「待实现」字样在 dex 中为 0；源码无商标
-> 字样（搜不到 CASIO / 卡西欧）；`KeyAction.Todo` / `ThemeToggle` / `KeyIcon.THEME` 均为 0；未新增任何图片 / 图标 /
-> 字体资源 —— res 清单仍只有 colors / strings / themes / 自适应图标）」，未做真机 UI 走查。
+> 未接设备 / 模拟器（emulator-5554 被其他任务占用，按要求未动），本轮验证为「编译绿（`assembleDebug`）+
+> **784 条 JVM 回归全通过** + 产物审计（源码无商标字样、无硬编码 key、唯一新增权限 INTERNET、未新增图片/字体资源，
+> 只多了 `res/xml/file_paths.xml`）」，未做真机 UI 走查，未真连外部 API（无真实 key）。

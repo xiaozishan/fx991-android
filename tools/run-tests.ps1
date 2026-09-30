@@ -25,7 +25,8 @@ $suites = @(
     @{ name = "InsetsTest";   file = "tools\InsetsTest.java";   out = "$env:TEMP\fx991-t8" },
     @{ name = "UnifiedTest";  file = "tools\UnifiedTest.java";  out = "$env:TEMP\fx991-t9" },
     @{ name = "NatLayoutTest"; file = "tools\NatLayoutTest.java"; out = "$env:TEMP\fx991-t10" },
-    @{ name = "BatchDTest";   file = "tools\BatchDTest.java";   out = "$env:TEMP\fx991-t11" }
+    @{ name = "BatchDTest";   file = "tools\BatchDTest.java";   out = "$env:TEMP\fx991-t11" },
+    @{ name = "PhotoAiTest";  file = "tools\PhotoAiTest.java";  out = "$env:TEMP\fx991-t12" }
 )
 
 $failed = 0

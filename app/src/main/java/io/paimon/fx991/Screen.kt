@@ -18,4 +18,7 @@ enum class Screen(val title: String) {
     BASEN("基数换算"),
     TABLE("函数表"),
     RATIO("比例"),
+
+    // ---- 批次 E：拍照解题（AI 视觉识别 → 回填主行） ----
+    PHOTO_SOLVE("拍照解题"),
 }

@@ -43,6 +43,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -57,13 +59,15 @@ import io.paimon.fx991.Overlay
 import io.paimon.fx991.PrecisionMode
 import io.paimon.fx991.Screen
 import io.paimon.fx991.engine.AngleMode
+import io.paimon.fx991.engine.API_PRESETS
+import io.paimon.fx991.engine.ApiConfig
 import io.paimon.fx991.engine.NumberNotation
 import io.paimon.fx991.engine.SciConstants
 import io.paimon.fx991.engine.SiPrefixes
 import io.paimon.fx991.engine.UnitConvert
 import io.paimon.fx991.engine.label
 
-const val APP_VERSION = "1.4.0-batchD"
+const val APP_VERSION = "1.5.0-photoai"
 const val APP_REPO = "https://github.com/xiaozishan/workspace"
 
 @Composable
@@ -92,6 +96,8 @@ fun CalcApp(vm: CalcViewModel = viewModel()) {
                     Screen.BASEN -> BaseNScreen(onBack = { vm.goto(Screen.CALC) })
                     Screen.TABLE -> TableScreen(onBack = { vm.goto(Screen.CALC) })
                     Screen.RATIO -> RatioScreen(onBack = { vm.goto(Screen.CALC) })
+                    // ---- 批次 E ----
+                    Screen.PHOTO_SOLVE -> PhotoSolveScreen(vm, onBack = { vm.goto(Screen.CALC) })
                     else -> CalcSurface(vm)
                 }
                 when (vm.overlay) {
@@ -100,7 +106,6 @@ fun CalcApp(vm: CalcViewModel = viewModel()) {
                     Overlay.SETTINGS -> SettingsPanel(vm)
                     Overlay.MORE -> MorePanel(vm)
                     Overlay.PRO -> ProPanel(vm)
-                    Overlay.PHOTO -> PhotoPanel(vm)
                     Overlay.HISTORY -> HistoryPanel(vm)
                     Overlay.FUNC -> FuncPanel(vm)
                     Overlay.HELP -> HelpPanel(vm)
@@ -382,7 +387,98 @@ private fun SettingsPanel(vm: CalcViewModel) {
             Switch(checked = vm.settings.vibration, onCheckedChange = { vm.setVibration(it) })
         }
         Spacer(Modifier.height(6.dp))
+        ApiSettingsSection(vm)
     }
+}
+
+// ---------------------------------------------------------------------------
+// 批次 E：设置面板里的「解题 API」一节（拍照解题用）
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun ApiSettingsSection(vm: CalcViewModel) {
+    val c = LocalCalcColors.current
+    Spacer(Modifier.height(8.dp))
+    HorizontalDivider(color = c.keyEdge)
+    Spacer(Modifier.height(14.dp))
+
+    Text("解题 API（拍照解题用）", color = c.chromeInk, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+    Spacer(Modifier.height(4.dp))
+    Text(
+        "⚠️ API Key 以明文保存在本机（SharedPreferences），不加密、不上传到任何我们控制的服务器；" +
+            "请勿在公共 / 他人设备上填写。",
+        color = c.lcdError, fontSize = 11.sp, lineHeight = 15.sp,
+    )
+    Spacer(Modifier.height(8.dp))
+
+    ApiField("Base URL", vm.apiBaseUrl) { vm.updateApiBase(it) }
+    ApiField("API Key", vm.apiKey, mask = true) { vm.updateApiKey(it) }
+    ApiField("模型名", vm.apiModel) { vm.updateApiModel(it) }
+    ApiField("超时秒数（${ApiConfig.MIN_TIMEOUT_SEC}–${ApiConfig.MAX_TIMEOUT_SEC}）", vm.apiTimeoutText) {
+        vm.updateApiTimeout(it)
+    }
+
+    Spacer(Modifier.height(2.dp))
+    Text("预设一键填充（只填 Base URL 和模型名，Key 自己填）：",
+        color = c.keyNeutralInk.copy(alpha = 0.7f), fontSize = 11.sp)
+    Spacer(Modifier.height(6.dp))
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        API_PRESETS.take(2).forEach { p ->
+            Button(
+                onClick = { vm.applyApiPreset(p) },
+                modifier = Modifier.weight(1f).height(38.dp),
+                shape = RoundedCornerShape(9.dp),
+                contentPadding = PaddingValues(0.dp),
+                border = BorderStroke(1.dp, c.keyEdge),
+                colors = ButtonDefaults.buttonColors(containerColor = c.keyNeutral, contentColor = c.bodyInk),
+            ) { Text(p.name, fontSize = 12.sp, maxLines = 1) }
+        }
+    }
+    Spacer(Modifier.height(6.dp))
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        API_PRESETS.drop(2).forEach { p ->
+            Button(
+                onClick = { vm.applyApiPreset(p) },
+                modifier = Modifier.weight(1f).height(38.dp),
+                shape = RoundedCornerShape(9.dp),
+                contentPadding = PaddingValues(0.dp),
+                border = BorderStroke(1.dp, c.keyEdge),
+                colors = ButtonDefaults.buttonColors(containerColor = c.keyNeutral, contentColor = c.bodyInk),
+            ) { Text(p.name, fontSize = 12.sp, maxLines = 1) }
+        }
+    }
+    Spacer(Modifier.height(10.dp))
+
+    Button(
+        onClick = { vm.testApiConnection() },
+        enabled = !vm.apiTestBusy,
+        shape = RoundedCornerShape(10.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = c.keyEquals, contentColor = c.keyEqualsInk),
+        modifier = Modifier.fillMaxWidth().height(42.dp),
+    ) { Text(if (vm.apiTestBusy) "正在测试连接…" else "测试连接", fontSize = 13.sp) }
+    if (vm.apiTestResult.isNotEmpty()) {
+        Spacer(Modifier.height(8.dp))
+        val ok = vm.apiTestResult.startsWith("连接成功")
+        Text(
+            vm.apiTestResult,
+            color = if (ok) c.keyNeutralInk else c.lcdError,
+            fontSize = 12.sp, lineHeight = 17.sp,
+        )
+    }
+    Spacer(Modifier.height(6.dp))
+}
+
+@Composable
+private fun ApiField(label: String, value: String, mask: Boolean = false, onValueChange: (String) -> Unit) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label, fontSize = 11.sp) },
+        singleLine = true,
+        visualTransformation = if (mask) PasswordVisualTransformation() else VisualTransformation.None,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    Spacer(Modifier.height(8.dp))
 }
 
 @Composable
@@ -461,18 +557,6 @@ private fun ProPanel(vm: CalcViewModel) {
             "非官方声明：本应用为个人学习用途的界面复刻，与任何品牌厂商均无任何关联；" +
                 "未使用任何厂商的商标、logo、字体或官方素材，全部界面与图标均由代码绘制。"
         )
-    }
-}
-
-@Composable
-private fun PhotoPanel(vm: CalcViewModel) {
-    PanelCard(title = "拍照解题", subtitle = "本应用不提供该功能", onClose = { vm.closeOverlay() }) {
-        BodyText("本应用是完全离线的本地计算器，不做拍照解题，也不会假装能做。")
-        BodyText("为什么不提供：")
-        BodyText("① 离线优先——不联网、不上传图片，没有云端 OCR / 图像识别可用；")
-        BodyText("② 零第三方依赖——不引入任何 OCR / 视觉模型引擎；")
-        BodyText("③ 不申请相机权限——安装包不索取与计算无关的权限。")
-        BodyText("需要拍照解题时，请使用支持该功能的其他应用；本应用专注于把算式算准、算快。")
     }
 }
 

@@ -1,13 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- 批次 E：拍照解题需要联网（用户自己配置的 API）。相机不申请权限——
+         用 MediaStore.ACTION_IMAGE_CAPTURE + FileProvider 委托系统相机。 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
         android:supportsRtl="false"
-        android:theme="@style/Theme.Fx991">
+        android:theme="@style/Theme.Fx991"
+        android:usesCleartextTraffic="true">
+
+        <!-- usesCleartextTraffic=true 的取舍（已写进 README）：
+             允许用户把解题 API 的 Base URL 填成 http://（自建 / 局域网服务常见）。
+             代价是全部网络请求允许明文 HTTP——本应用唯一的网络出口就是用户
+             自己配置的解题 API，没有内置任何云端地址，风险可控。 -->
 
         <activity
             android:name=".MainActivity"
@@ -21,6 +31,17 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- 拍照解题：把相机拍的照片写进缓存目录再读回（不申请 CAMERA 权限） -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="io.paimon.fx991.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 
 </manifest>

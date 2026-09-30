@@ -92,6 +92,30 @@ fun KeyGlyph(icon: KeyIcon, tint: Color, size: Dp = 18.dp) {
                 drawLine(tint, Offset(w * 0.42f, h * 0.16f), Offset(w * 0.58f, h * 0.16f), sw)
                 drawLine(tint, Offset(w * 0.58f, h * 0.16f), Offset(w * 0.66f, h * 0.28f), sw)
             }
+            KeyIcon.GALLERY -> Canvas(Modifier.size(size)) {
+                // 相册：相框 + 山 + 太阳（全部手绘，不引图片资源）
+                val w = this.size.width
+                val h = this.size.height
+                val sw = h * 0.09f
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(w * 0.12f, h * 0.18f),
+                    size = Size(w * 0.76f, h * 0.64f),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(h * 0.1f),
+                    style = Stroke(width = sw)
+                )
+                // 太阳
+                drawCircle(tint, radius = h * 0.08f, center = Offset(w * 0.34f, h * 0.36f))
+                // 山（折线）
+                val p = Path().apply {
+                    moveTo(w * 0.16f, h * 0.78f)
+                    lineTo(w * 0.38f, h * 0.52f)
+                    lineTo(w * 0.54f, h * 0.68f)
+                    lineTo(w * 0.66f, h * 0.56f)
+                    lineTo(w * 0.84f, h * 0.78f)
+                }
+                drawPath(p, tint, style = Stroke(width = sw))
+            }
             KeyIcon.BACKSPACE -> Canvas(Modifier.size(size)) {
                 val w = this.size.width
                 val h = this.size.height

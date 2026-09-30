@@ -64,7 +64,7 @@ sealed interface KeyAction {
 }
 
 /** 手绘矢量图标（不引任何图片/图标资源） */
-enum class KeyIcon { NONE, MENU, PRO, SIGMA, GEAR, PLUSMINUS, CAMERA, BACKSPACE }
+enum class KeyIcon { NONE, MENU, PRO, SIGMA, GEAR, PLUSMINUS, CAMERA, GALLERY, BACKSPACE }
 
 /** 键帽分类（决定配色） */
 enum class KeyKind { UTIL, PRO, MORE, DIGIT, FUNC, OP, EQUALS, DANGER, MEM, SHIFT, ALPHA, NAV }
