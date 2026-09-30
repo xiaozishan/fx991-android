@@ -1,0 +1,11 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- 单色层：Android 13+ 主题图标（启动器取色渲染成单色） -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M40,24 h28 a8,8 0 0 1 8,8 v44 a8,8 0 0 1 -8,8 h-28 a8,8 0 0 1 -8,-8 v-44 a8,8 0 0 1 8,-8 z M38,30 h32 v15 h-32 z M38,50 h10 v8 h-10 z M50,50 h10 v8 h-10 z M62,50 h10 v8 h-10 z M38,62 h10 v8 h-10 z M50,62 h10 v8 h-10 z M62,62 h10 v8 h-10 z M38,74 h22 v8 h-22 z" />
+</vector>

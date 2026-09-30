@@ -1,0 +1,729 @@
+package io.paimon.fx991
+
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.ViewModel
+import io.paimon.fx991.engine.AngleMode
+import io.paimon.fx991.engine.CalcEngine
+import io.paimon.fx991.engine.CalcMathError
+import io.paimon.fx991.engine.CalcSyntaxError
+import io.paimon.fx991.engine.ComplexRect
+import io.paimon.fx991.engine.NumberNotation
+import io.paimon.fx991.engine.NumericError
+import io.paimon.fx991.engine.NumericOps
+import io.paimon.fx991.engine.PolarForm
+import io.paimon.fx991.engine.RandomOps
+import io.paimon.fx991.engine.Registers
+import io.paimon.fx991.engine.Sexagesimal
+import io.paimon.fx991.engine.Value
+import io.paimon.fx991.ui.KeyAction
+import kotlin.math.abs
+import kotlin.math.floor
+
+data class HistoryEntry(val expr: String, val result: String)
+
+/** 结果显示格式：分数 / 带分数 / 小数（S⇔D 循环切换） */enum class DisplayMode(val shortLabel: String) {
+    FRAC("FRAC"),
+    MIXED("MXD"),
+    DEC("DEC");
+
+    fun next(): DisplayMode = when (this) {
+        FRAC -> MIXED
+        MIXED -> DEC
+        DEC -> FRAC
+    }
+}
+
+class CalcViewModel : ViewModel() {
+
+    var expression by mutableStateOf("")
+        private set
+
+    var resultText by mutableStateOf("")
+        private set
+
+    var previewText by mutableStateOf("")
+        private set
+
+    var isError by mutableStateOf(false)
+        private set
+
+    var angleMode by mutableStateOf(AngleMode.DEG)
+        private set
+
+    var memory by mutableStateOf(0.0)
+        private set
+
+    var memorySet by mutableStateOf(false)
+        private set
+
+    var ans by mutableStateOf(0.0)
+        private set
+
+    /** 上上次结果 PreAns（与 Ans 并存，历史里维护） */
+    var preAns by mutableStateOf(0.0)
+        private set
+
+    /** 变量寄存器（STO 存入 A–F / x / y） */
+    private val registers = Registers()
+
+    /** STO 面板里的确认提示 */
+    var storeMessage by mutableStateOf("")
+        private set
+
+    /** 已存入的变量（用于界面回显） */
+    var variables by mutableStateOf<Map<String, Double>>(emptyMap())
+        private set
+
+    /** SHIFT / ALPHA 双功能层 */
+    var shiftActive by mutableStateOf(false)
+        private set
+
+    var alphaActive by mutableStateOf(false)
+        private set
+
+    var stoActive by mutableStateOf(false)
+        private set
+
+    var rclActive by mutableStateOf(false)
+        private set
+
+    var displayMode by mutableStateOf(DisplayMode.FRAC)
+        private set
+
+    /** 主界面：计算 / 微分方程（MODE 菜单切换） */
+    var screen by mutableStateOf(Screen.CALC)
+        private set
+
+    /** 当前覆盖层：菜单 / 设置 / 更多 / 关于 / 拍照说明 / 历史 / 数值功能对话框 */
+    var overlay by mutableStateOf(Overlay.NONE)
+        private set
+
+    /** 应用设置（主题 / 精度 / 震动） */
+    var settings by mutableStateOf(CalculatorSettings())
+        private set
+
+    /** 数值功能对话框（∫dx / d/dx / Σ / SOLVE / Limit / CALC / °′″ / hyp） */
+    var funcDialog by mutableStateOf<FuncDialog?>(null)
+        private set
+
+    /** 最近一次 a∠θ 的直角坐标结果；S⇔D 在 直角 ⇄ 极坐标 之间切 */
+    private var lastComplex: ComplexRect? = null
+    private var polarFormShown = false
+
+    fun openOverlay(o: Overlay) {
+        overlay = o
+    }
+
+    fun closeOverlay() {
+        overlay = Overlay.NONE
+        funcDialog = null
+    }
+
+    fun goto(target: Screen) {
+        screen = target
+        overlay = Overlay.NONE
+        funcDialog = null
+    }
+
+    fun openFunc(kind: FuncKind) {
+        funcDialog = newFuncDialog(kind, expression)
+        overlay = Overlay.FUNC
+        cancelLayers()
+    }
+
+    /** hyp 对话框里点一个双曲函数 → 直接写进表达式 */
+    fun insertHyper(name: String) {
+        closeOverlay()
+        insert(name + "(")
+    }
+
+    // ---- 设置项 ----
+    fun setTheme(t: AppTheme) {
+        settings = settings.copy(theme = t)
+    }
+
+    fun setAngle(m: AngleMode) {
+        angleMode = m
+        reformatResult()
+        refreshPreview()
+    }
+
+    fun setPrecision(p: PrecisionMode) {
+        settings = settings.copy(precision = p)
+        reformatResult()
+    }
+
+    fun setSigDigits(n: Int) {
+        settings = settings.copy(sigDigits = n.coerceIn(1, 15))
+        reformatResult()
+    }
+
+    fun setDecimals(n: Int) {
+        settings = settings.copy(decimals = n.coerceIn(0, 12))
+        reformatResult()
+    }
+
+    fun setVibration(b: Boolean) {
+        settings = settings.copy(vibration = b)
+    }
+
+    /** 数字显示模式：普通 / 科学记数 / 工程记数 */
+    fun setNotation(n: NumberNotation) {
+        settings = settings.copy(notation = n)
+        reformatResult()
+    }
+
+    /** ENG 键：切工程记数法显示（再按一次回普通） */
+    fun toggleEng() {
+        settings = settings.copy(
+            notation = if (settings.notation == NumberNotation.ENG) NumberNotation.NORM
+            else NumberNotation.ENG,
+        )
+        reformatResult()
+    }
+
+    /** Ran#：插入一个 0–1 均匀随机数 */
+    fun insertRandom() {
+        insert(CalcEngine.format(RandomOps.uniform(), 10, null))
+    }
+
+    /** 分数显示：假分数 / 带分数 / 小数（与 S⇔D 同一个状态） */
+    fun chooseDisplayMode(m: DisplayMode) {
+        displayMode = m
+        reformatResult()
+    }
+
+    val history = mutableStateListOf<HistoryEntry>()
+
+    private var justEvaluated = false
+    private var mrcArmed = false
+    private var histCursor = -1
+    private var lastValue: Double? = null
+
+    /** 上一次的精确结果（用于 S⇔D 在分数/小数之间切换） */
+    private var lastExact: io.paimon.fx991.engine.Value? = null
+
+    private val measurableAtoms = listOf(
+        "sin\u207B\u00B9(", "cos\u207B\u00B9(", "tan\u207B\u00B9(",
+        "asinh(", "acosh(", "atanh(", "sinh(", "cosh(", "tanh(", "cbrt(", "abs(",
+        "sin(", "cos(", "tan(",
+        "logb(", "log(", "ln(", "root(", "npr(", "ncr(", "exp(",
+        "\u221A(", "sin\u207B\u00B9", "cos\u207B\u00B9", "tan\u207B\u00B9",
+        "10^", "Ans", "PreAns", "\u00D710^", "\u207B\u00B9"
+    )
+
+    private fun memValue(): Double = if (memorySet) memory else 0.0
+
+    fun cancelLayers() {
+        shiftActive = false
+        alphaActive = false
+    }
+
+    private fun currentValue(): Double {
+        if (expression.isNotBlank()) {
+            try {
+                return CalcEngine.evaluate(
+                    CalcEngine.autoClose(expression), angleMode, ans, memValue(), preAns, varsMap(),
+                )
+            } catch (_: Exception) {
+                // 落到下面的兜底
+            }
+        }
+        lastValue?.let { return it }
+        return ans
+    }
+
+    /** 供表达式代入的 STO 变量表（A–F / x / y） */
+    private fun varsMap(): Map<String, Double> = registers.snapshot()
+
+    fun onAction(action: KeyAction) {
+        val layer = shiftActive || alphaActive
+        when (action) {
+            KeyAction.Shift -> {
+                shiftActive = !shiftActive
+                alphaActive = false
+                return
+            }
+            KeyAction.Alpha -> {
+                alphaActive = !alphaActive
+                shiftActive = false
+                return
+            }
+            else -> Unit
+        }
+        if (layer) cancelLayers()
+        if (action !is KeyAction.Mrc) mrcArmed = false
+        when (action) {
+            KeyAction.Ac -> clearAll()
+            KeyAction.Del -> backspace()
+            KeyAction.Equals -> evaluateNow()
+            KeyAction.ToggleAngle -> toggleAngle()
+            KeyAction.MPlus -> memoryOp(1.0)
+            KeyAction.MMinus -> memoryOp(-1.0)
+            KeyAction.Mrc -> mrc()
+            KeyAction.HistUp, KeyAction.PadUp, KeyAction.PadLeft -> historyUp()
+            KeyAction.HistDown, KeyAction.PadDown, KeyAction.PadRight -> historyDown()
+            KeyAction.PadOk -> evaluateNow()
+            KeyAction.Sd -> cycleDisplay()
+            KeyAction.FracFormat -> cycleDisplay()
+            KeyAction.Fraction -> insert("\u00F7")
+            KeyAction.SignToggle -> insert("\u2212")
+            KeyAction.ThemeToggle -> Unit
+            KeyAction.Mode, KeyAction.Menu -> openOverlay(Overlay.MODE)
+            KeyAction.Settings -> openOverlay(Overlay.SETTINGS)
+            KeyAction.More -> openOverlay(Overlay.MORE)
+            KeyAction.Pro -> openOverlay(Overlay.PRO)
+            KeyAction.Photo -> openOverlay(Overlay.PHOTO)
+            is KeyAction.OpenFunc -> openFunc(action.kind)
+            KeyAction.OpenSto -> {
+                storeMessage = ""
+                openOverlay(Overlay.STO)
+            }
+            KeyAction.OpenConst -> openOverlay(Overlay.CONST)
+            KeyAction.OpenConv -> openOverlay(Overlay.CONV)
+            KeyAction.OpenSi -> openOverlay(Overlay.SI)
+            KeyAction.OpenHistory -> openOverlay(Overlay.HISTORY)
+            KeyAction.ClrAll -> requestClearAll()
+            KeyAction.EngToggle -> toggleEng()
+            KeyAction.RandomInsert -> insertRandom()
+            is KeyAction.GoScreen -> goto(action.screen)
+            KeyAction.Shift, KeyAction.Alpha -> Unit
+            is KeyAction.Insert -> insert(action.text)
+        }
+    }
+
+    private fun shouldRemainNewEntry(): Boolean = justEvaluated
+
+    private fun insert(text: String) {
+        if (shouldRemainNewEntry()) {
+            val c = text.firstOrNull()
+            val startsOperand = c != null && (c.isDigit() || c == '.' || c == '(' || c == '\u221A' ||
+                c.isLetter() || c == '\u2212')
+            expression = if (startsOperand) text else "Ans$text"
+            justEvaluated = false
+            resultText = ""
+            isError = false
+        } else {
+            expression += text
+        }
+        histCursor = -1
+        refreshPreview()
+    }
+
+    private fun clearAll() {
+        expression = ""
+        resultText = ""
+        previewText = ""
+        isError = false
+        justEvaluated = false
+        histCursor = -1
+        lastExact = null
+        lastComplex = null
+        polarFormShown = false
+        cancelLayers()
+    }
+
+    // ---- 批次 B：CLR ALL（先弹确认）/ STO 变量 ----
+
+    /** CLR ALL：先弹确认对话框 */
+    fun requestClearAll() {
+        cancelLayers()
+        overlay = Overlay.CLRCONFIRM
+    }
+
+    /** 确认后：清历史 / 变量 / M / 设置 */
+    fun doClearAll() {
+        clearAll()
+        history.clear()
+        registers.clearAll()
+        memory = 0.0
+        memorySet = false
+        ans = 0.0
+        preAns = 0.0
+        lastValue = null
+        displayMode = DisplayMode.FRAC
+        settings = CalculatorSettings()
+        storeMessage = ""
+        variables = emptyMap()
+        closeOverlay()
+    }
+
+    /** STO：把当前结果存入变量（A–F / x / y / M） */
+    fun storeVariable(name: String) {
+        val v = currentValue()
+        storeMessage = if (name == "M") {
+            memory = v
+            memorySet = true
+            "已存入 M = " + formatNumber(v)
+        } else {
+            registers.store(name, v)
+        }
+        variables = registers.snapshot()
+    }
+
+    /** 变量插入表达式（A–F / x / y / M） */
+    fun insertVariable(name: String) {
+        closeOverlay()
+        insert(name)
+    }
+
+    /** 科学常数：把值以可写回表达式的字面量插入 */
+    fun insertConstant(v: Double) {
+        closeOverlay()
+        insert(CalcEngine.literal(v))
+    }
+
+    /** 历史记录：删一条 */
+    fun removeHistory(index: Int) {
+        if (index in history.indices) history.removeAt(index)
+    }
+
+    private fun backspace() {
+        if (justEvaluated) {
+            justEvaluated = false
+            resultText = ""
+            isError = false
+        }
+        if (expression.isEmpty()) return
+        for (a in measurableAtoms) {
+            if (expression.endsWith(a)) {
+                expression = expression.dropLast(a.length)
+                histCursor = -1
+                refreshPreview()
+                return
+            }
+        }
+        expression = expression.dropLast(1)
+        histCursor = -1
+        refreshPreview()
+    }
+
+    private fun toggleAngle() {
+        angleMode = if (angleMode == AngleMode.DEG) AngleMode.RAD else AngleMode.DEG
+        refreshPreview()
+    }
+
+    private fun cycleDisplay() {
+        val c = lastComplex
+        if (c != null) {
+            polarFormShown = !polarFormShown
+            resultText = if (polarFormShown) polarText(c) else rectText(c)
+            isError = false
+            return
+        }
+        displayMode = displayMode.next()
+        val v = lastExact ?: return
+        resultText = formatValue(v)
+        isError = false
+    }
+
+    /** 显示精度 / 角度制改了之后，把已有结果按新设置重算一遍 */
+    private fun reformatResult() {
+        val c = lastComplex
+        if (c != null) {
+            resultText = if (polarFormShown) polarText(c) else rectText(c)
+            return
+        }
+        val v = lastExact ?: return
+        resultText = formatValue(v)
+    }
+
+    private fun evaluateNow() {
+        val src = CalcEngine.autoClose(expression)
+        if (src.isBlank()) return
+        expression = src
+        try {
+            if (src.contains(ANGLE_SIGN)) {
+                val c = PolarForm.evaluate(src, angleMode, ans, memValue())
+                lastComplex = c
+                lastExact = null
+                polarFormShown = false
+                resultText = rectText(c)
+                previewText = ""
+                isError = false
+                pushHistory(src, resultText)
+                justEvaluated = true
+                return
+            }
+            val v = CalcEngine.evaluateValue(
+                src, angleMode, ans, memValue(), preAns = preAns, vars = varsMap(),
+            )
+            val double = v.toDouble()
+            val text = formatValue(v)
+            preAns = ans
+            ans = double
+            lastValue = double
+            lastExact = v
+            lastComplex = null
+            resultText = text
+            previewText = ""
+            isError = false
+            pushHistory(src, text)
+            justEvaluated = true
+        } catch (_: CalcSyntaxError) {
+            resultText = "\u8BED\u6CD5\u9519\u8BEF"
+            previewText = ""
+            isError = true
+            justEvaluated = false
+        } catch (_: CalcMathError) {
+            resultText = "\u6570\u5B66\u9519\u8BEF"
+            previewText = ""
+            isError = true
+            justEvaluated = false
+        } catch (_: Exception) {
+            resultText = "\u6570\u5B66\u9519\u8BEF"
+            previewText = ""
+            isError = true
+            justEvaluated = false
+        }
+    }
+
+    private fun refreshPreview() {
+        if (justEvaluated) {
+            previewText = ""
+            return
+        }
+        val src = CalcEngine.autoClose(expression)
+        if (src.isBlank()) {
+            previewText = ""
+            return
+        }
+        previewText = try {
+            formatValue(
+                CalcEngine.evaluateValue(
+                    src, angleMode, ans, memValue(), preAns = preAns, vars = varsMap(),
+                )
+            )
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
+    private fun memoryOp(sign: Double) {
+        if (expression.isBlank() && lastValue == null) return
+        memory += sign * currentValue()
+        memorySet = true
+        resultText = formatNumber(memory)
+        isError = false
+        justEvaluated = true
+        previewText = ""
+        lastExact = Value.Floating(memory)
+        lastComplex = null
+    }
+
+    private fun mrc() {
+        if (mrcArmed) {
+            memory = 0.0
+            memorySet = false
+            mrcArmed = false
+            resultText = "0"
+            isError = false
+            return
+        }
+        insert("M")
+        mrcArmed = true
+    }
+
+    private fun historyUp() {
+        if (history.isEmpty()) return
+        histCursor = if (histCursor < 0) 0 else minOf(histCursor + 1, history.size - 1)
+        loadFromHistory()
+    }
+
+    private fun historyDown() {
+        if (history.isEmpty()) return
+        if (histCursor <= 0) {
+            histCursor = -1
+            expression = ""
+        } else {
+            histCursor -= 1
+        }
+        loadFromHistory()
+    }
+
+    private fun loadFromHistory() {
+        justEvaluated = false
+        resultText = ""
+        isError = false
+        if (histCursor in history.indices) {
+            expression = history[histCursor].expr
+        }
+        refreshPreview()
+    }
+
+    // -----------------------------------------------------------------------
+    // 批次 A：显示格式化 / 极坐标文本 / 数值功能对话框
+    // -----------------------------------------------------------------------
+
+    private fun pushHistory(expr: String, text: String) {
+        history.add(0, HistoryEntry(expr, text))
+        while (history.size > 40) history.removeAt(history.size - 1)
+        histCursor = -1
+    }
+
+    private fun fixDecimals(): Int? =
+        if (settings.precision == PrecisionMode.DECIMALS) settings.decimals else null
+
+    /** 双轨结果按当前设置显示 */
+    private fun formatValue(v: Value): String = CalcEngine.formatValue(
+        v,
+        displayMode == DisplayMode.DEC,
+        displayMode == DisplayMode.MIXED,
+        settings.sigDigits,
+        fixDecimals(),
+        settings.notation,
+    )
+
+    /** 预估值 / 对话框里的纯浮点显示 */
+    fun formatNumber(v: Double): String =
+        CalcEngine.format(v, settings.sigDigits, fixDecimals(), settings.notation)
+
+    /** 当前角度制的单位后缀 */
+    private fun angleUnit(): String = when (angleMode) {
+        AngleMode.DEG -> "\u00B0"
+        AngleMode.GRAD -> " grad"
+        AngleMode.RAD -> " rad"
+    }
+
+    /** a∠θ 结果：直角坐标 x+yi */
+    private fun rectText(c: ComplexRect): String {
+        val re = formatNumber(c.re)
+        return when {
+            abs(c.im) < 1e-12 -> re
+            c.im > 0.0 -> "$re + ${formatNumber(c.im)}i"
+            else -> "$re \u2212 ${formatNumber(-c.im)}i"
+        }
+    }
+
+    /** a∠θ 结果：极坐标 r∠θ */
+    private fun polarText(c: ComplexRect): String {
+        val p = PolarForm.toPolar(c.re, c.im, angleMode)
+        return "${formatNumber(p.r)}${ANGLE_SIGN}${formatNumber(p.theta)}${angleUnit()}"
+    }
+
+    /** 函数帮助：把语法键写进表达式并回到计算界面 */
+    fun insertFromHelp(text: String) {
+        goto(Screen.CALC)
+        insert(text)
+    }
+
+    /** 历史记录面板里点一条 → 回填表达式 */
+    fun selectHistory(expr: String) {
+        justEvaluated = false
+        resultText = ""
+        isError = false
+        expression = expr
+        lastComplex = null
+        polarFormShown = false
+        closeOverlay()
+        refreshPreview()
+    }
+
+    /** 对话框里的“计算”按钮 */
+    fun runFunc() {
+        val d = funcDialog ?: return
+        d.error = ""
+        d.result = ""
+        try {
+            when (d.kind) {
+                FuncKind.INTEGRAL -> {
+                    val f = need(d.f, "f(x)")
+                    val a = num(d.a, "下限")
+                    val b = num(d.b, "上限")
+                    val tol = d.c.trim().toDoubleOrNull() ?: 1e-10
+                    d.result = "= " + formatNumber(NumericOps.integrate(f, angleMode, a, b, tol))
+                }
+                FuncKind.DERIV -> {
+                    val f = need(d.f, "f(x)")
+                    val x = num(d.a, "x 值")
+                    d.result = "= " + formatNumber(NumericOps.derivative(f, angleMode, x))
+                }
+                FuncKind.SUMMATION -> {
+                    val f = need(d.f, "f(x)")
+                    val a = longNum(d.a, "下界")
+                    val b = longNum(d.b, "上界")
+                    d.result = "= " + formatNumber(NumericOps.summation(f, angleMode, a, b))
+                }
+                FuncKind.SOLVE -> {
+                    val f = need(d.f, "f(x)")
+                    val g = num(d.a, "初值")
+                    val r = NumericOps.solveRoot(f, angleMode, g)
+                    val ex = r.exact
+                    d.result = if (ex != null)
+                        "x = ${CalcEngine.formatRational(ex, false)}（${r.method}）"
+                    else "x = ${formatNumber(r.root)}（${r.method}）"
+                }
+                FuncKind.LIMIT -> {
+                    val f = need(d.f, "f(x)")
+                    val x0 = num(d.a, "x →")
+                    val r = NumericOps.limit(f, angleMode, x0)
+                    d.result = if (r.equal)
+                        "lim = ${formatNumber(r.value())}"
+                    else "左 ${formatNumber(r.left)}｜右 ${formatNumber(r.right)}（左右不等）"
+                }
+                FuncKind.CALC -> {
+                    val f = need(d.f, "表达式")
+                    val x = d.a.trim().toDoubleOrNull() ?: 0.0
+                    val y = d.b.trim().toDoubleOrNull() ?: 0.0
+                    val v = CalcEngine.evaluateWith(f, angleMode, x, y)
+                    ans = v
+                    d.result = "= " + formatNumber(v)
+                }
+                FuncKind.DMS -> {
+                    val deg = d.a.trim().toDoubleOrNull() ?: throw NumericError("请输入度")
+                    val minv = d.b.trim().toDoubleOrNull() ?: 0.0
+                    val sec = d.c.trim().toDoubleOrNull() ?: 0.0
+                    d.result = if (d.b.isBlank() && d.c.isBlank()) {
+                        Sexagesimal.fromDegrees(deg).toString()
+                    } else {
+                        formatNumber(Sexagesimal.toDegrees(deg, minv, sec)) + "\u00B0"
+                    }
+                }
+                FuncKind.HYPER -> Unit
+                FuncKind.POL -> {
+                    val x = num(d.a, "x")
+                    val y = num(d.b, "y")
+                    val p = PolarForm.toPolar(x, y, angleMode)
+                    d.result = "r = ${formatNumber(p.r)}，θ = ${formatNumber(p.theta)}${angleUnit()}"
+                }
+                FuncKind.REC -> {
+                    val r = num(d.a, "r")
+                    val th = num(d.b, "θ")
+                    val c = PolarForm.toRect(r, th, angleMode)
+                    d.result = "x = ${formatNumber(c.re)}，y = ${formatNumber(c.im)}"
+                }
+                FuncKind.RANINT -> {
+                    val a = longNum(d.a, "下界")
+                    val b = longNum(d.b, "上界")
+                    val n = longNum(d.c, "次数").toInt()
+                    val list = RandomOps.ranInts(a, b, n)
+                    d.result = list.joinToString(" ")
+                }
+            }
+        } catch (e: Exception) {
+            d.error = e.message ?: "计算失败"
+        }
+    }
+
+    private fun need(s: String, what: String): String {
+        val t = CalcEngine.autoClose(s.trim())
+        if (t.isBlank()) throw NumericError("请输入 $what")
+        return t
+    }
+
+    private fun num(s: String, what: String): Double =
+        s.trim().toDoubleOrNull() ?: throw NumericError("$what 不是合法数字")
+
+    private fun longNum(s: String, what: String): Long {
+        val v = s.trim().toDoubleOrNull() ?: throw NumericError("$what 不是合法数字")
+        if (v != floor(v)) throw NumericError("$what 必须是整数")
+        return v.toLong()
+    }
+
+    private companion object {
+        const val ANGLE_SIGN = '\u2220'
+    }
+}

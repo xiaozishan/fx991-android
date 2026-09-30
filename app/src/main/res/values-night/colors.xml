@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 深色：暗机身 -->
+    <color name="calc_body">#FF111418</color>
+    <color name="calc_body_edge">#FF1C2126</color>
+</resources>
