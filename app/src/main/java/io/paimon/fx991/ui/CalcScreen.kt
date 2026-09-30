@@ -42,6 +42,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -62,13 +65,14 @@ import io.paimon.fx991.Screen
 import io.paimon.fx991.engine.AngleMode
 import io.paimon.fx991.engine.API_PRESETS
 import io.paimon.fx991.engine.ApiConfig
+import io.paimon.fx991.engine.ReleaseInfo
 import io.paimon.fx991.engine.NumberNotation
 import io.paimon.fx991.engine.SciConstants
 import io.paimon.fx991.engine.SiPrefixes
 import io.paimon.fx991.engine.UnitConvert
 import io.paimon.fx991.engine.label
 
-const val APP_VERSION = "1.9.0-keymap"
+const val APP_VERSION = "1.10.0-updatecheck"
 const val APP_REPO = "https://github.com/xiaozishan/workspace"
 
 @Composable
@@ -128,6 +132,12 @@ fun CalcApp(vm: CalcViewModel = viewModel()) {
                     Box(Modifier.align(Alignment.BottomCenter)) {
                         NatKeyboardPanel(ni, Modifier.fillMaxWidth())
                     }
+                }
+                // 批次 K5：启动静默检查发现新版 → 弹提示（被「稍后」关掉的同版本不再弹；
+                // 有其他覆盖层开着时也不抢焦点）
+                val ua = vm.updateAvailable
+                if (ua != null && ua.tag != vm.updateDismissedTag && vm.overlay == Overlay.NONE) {
+                    UpdatePromptPanel(vm, ua)
                 }
             }
         }
@@ -316,7 +326,7 @@ private fun ModeMenuOverlay(vm: CalcViewModel) {
 @Composable
 private fun SettingsPanel(vm: CalcViewModel) {
     val c = LocalCalcColors.current
-    PanelCard(title = "设置", subtitle = "主题 · 角度制 · 显示精度 · 分数显示 · 按键震动", onClose = { vm.closeOverlay() }) {
+    PanelCard(title = "设置", subtitle = "主题 · 角度制 · 显示精度 · 分数显示 · 按键震动 · 检查更新", onClose = { vm.closeOverlay() }) {
         Text("主题", color = c.chromeInk, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(5.dp))
         ChoiceChips(
@@ -401,8 +411,95 @@ private fun SettingsPanel(vm: CalcViewModel) {
             }
             Switch(checked = vm.settings.vibration, onCheckedChange = { vm.setVibration(it) })
         }
+        Spacer(Modifier.height(8.dp))
+        HorizontalDivider(color = c.keyEdge)
+        Spacer(Modifier.height(14.dp))
+
+        // ---- 批次 K5：检查更新 ----
+        Text("检查更新", color = c.chromeInk, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(4.dp))
+        Text("当前版本：$APP_VERSION", color = c.bodyInk, fontSize = 12.sp)
+        if (vm.latestVersionText.isNotEmpty()) {
+            Text("最新版本：${vm.latestVersionText}", color = c.bodyInk, fontSize = 12.sp)
+        }
+        if (vm.updateCheckResult.isNotEmpty()) {
+            Spacer(Modifier.height(3.dp))
+            Text(
+                vm.updateCheckResult,
+                color = if (vm.updateAvailable != null) ShiftOrange else c.bodyInk,
+                fontSize = 12.sp,
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = { vm.checkUpdateNow() },
+                enabled = !vm.updateCheckBusy,
+                shape = RoundedCornerShape(10.dp),
+                border = BorderStroke(1.dp, ShiftOrange),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color.Transparent,
+                    contentColor = ShiftOrange,
+                ),
+                contentPadding = PaddingValues(horizontal = 14.dp),
+                modifier = Modifier.height(40.dp),
+            ) { Text(if (vm.updateCheckBusy) "检查中…" else "立即检查", fontSize = 13.sp) }
+            vm.updateAvailable?.let { info ->
+                val ctx = LocalContext.current
+                Button(
+                    onClick = {
+                        val url = info.apkUrl.ifEmpty { info.pageUrl }
+                        runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+                    },
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ShiftOrange,
+                        contentColor = Color.White,
+                    ),
+                    contentPadding = PaddingValues(horizontal = 14.dp),
+                    modifier = Modifier.height(40.dp),
+                ) { Text("下载 ${info.tag}", fontSize = 13.sp, maxLines = 1) }
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column {
+                Text("启动时自动检查更新", color = c.chromeInk, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text("每 12 小时最多检查一次；有新版才提示", color = c.keyNeutralInk.copy(alpha = 0.65f), fontSize = 11.sp)
+            }
+            Switch(checked = vm.autoCheckUpdate, onCheckedChange = { vm.setAutoCheck(it) })
+        }
         Spacer(Modifier.height(6.dp))
         ApiSettingsSection(vm)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 批次 K5：发现新版本的提示弹层（启动静默检查 / 手动检查共用）
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun UpdatePromptPanel(vm: CalcViewModel, info: ReleaseInfo) {
+    val ctx = LocalContext.current
+    PanelCard(
+        title = "发现新版本 ${info.tag}",
+        subtitle = "当前版本 $APP_VERSION",
+        onClose = { vm.dismissUpdate() },
+    ) {
+        if (info.title.isNotEmpty()) BodyText(info.title)
+        BodyText("可以到发布页查看更新说明，或直接下载最新 APK 覆盖安装。")
+        Spacer(Modifier.height(10.dp))
+        MenuButton("下载更新（APK 直链）", enabled = info.apkUrl.isNotEmpty()) {
+            runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(info.apkUrl))) }
+        }
+        MenuButton("打开发布页面") {
+            runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(info.pageUrl))) }
+        }
+        MenuButton("稍后") { vm.dismissUpdate() }
     }
 }
 

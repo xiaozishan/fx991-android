@@ -30,12 +30,18 @@ import io.paimon.fx991.engine.Sexagesimal
 import io.paimon.fx991.engine.SolveItem
 import io.paimon.fx991.engine.SolveKind
 import io.paimon.fx991.engine.Unified
+import io.paimon.fx991.engine.UpdateCheck
+import io.paimon.fx991.engine.UpdateException
+import io.paimon.fx991.engine.UpdateNetException
+import io.paimon.fx991.engine.ReleaseInfo
 import io.paimon.fx991.engine.UserFnDef
 import io.paimon.fx991.engine.UserFunctions
 import io.paimon.fx991.engine.Value
 import io.paimon.fx991.engine.VectorStore
 import io.paimon.fx991.ui.KeyAction
+import io.paimon.fx991.ui.APP_VERSION
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
@@ -1136,6 +1142,118 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // -----------------------------------------------------------------------
+    // 批次 K5：自动检查更新（GitHub Releases 公共 API；12 小时缓存窗口）
+    // -----------------------------------------------------------------------
+
+    private val updatePrefs = app.getSharedPreferences(UPDATE_PREFS, Context.MODE_PRIVATE)
+
+    /** 设置开关：启动时自动检查更新（默认开） */
+    var autoCheckUpdate by mutableStateOf(updatePrefs.getBoolean(KEY_UPDATE_AUTO, true))
+        private set
+
+    /** 手动检查进行中 / 结果文案（人话；自动检查失败时保持静默不写这里） */
+    var updateCheckBusy by mutableStateOf(false)
+        private set
+    var updateCheckResult by mutableStateOf("")
+        private set
+
+    /** 最近一次确认过的最新版本 tag（来自缓存或本次请求，用于设置页回显） */
+    var latestVersionText by mutableStateOf(updatePrefs.getString(KEY_UPDATE_TAG, "") ?: "")
+        private set
+
+    /** 发现的新版本（null = 没有新版 / 还没查过）；启动弹层与设置页下载按钮共用 */
+    var updateAvailable by mutableStateOf<ReleaseInfo?>(null)
+        private set
+
+    /** 本次会话里被「稍后」 dismiss 掉的 tag（同一会话不再反复弹同一个版本） */
+    var updateDismissedTag by mutableStateOf("")
+        private set
+
+    fun setAutoCheck(b: Boolean) {
+        autoCheckUpdate = b
+        updatePrefs.edit().putBoolean(KEY_UPDATE_AUTO, b).apply()
+    }
+
+    fun dismissUpdate() {
+        updateDismissedTag = updateAvailable?.tag ?: ""
+    }
+
+    /** 启动时静默检查：开关关 → 直接返回；12 小时窗口内 → 不请求，用缓存结果决定是否提示 */
+    fun autoCheckUpdateIfDue() {
+        if (!autoCheckUpdate) return
+        val last = updatePrefs.getLong(KEY_UPDATE_AT, 0L)
+        if (!UpdateCheck.dueForAutoCheck(last, System.currentTimeMillis())) {
+            val cachedTag = updatePrefs.getString(KEY_UPDATE_TAG, "") ?: ""
+            if (cachedTag.isNotEmpty() && UpdateCheck.isNewer(cachedTag, APP_VERSION)) {
+                updateAvailable = ReleaseInfo(
+                    tag = cachedTag,
+                    version = cachedTag.removePrefix("v").removePrefix("V"),
+                    pageUrl = updatePrefs.getString(KEY_UPDATE_PAGE, "") ?: "",
+                    apkUrl = updatePrefs.getString(KEY_UPDATE_APK, "") ?: "",
+                    title = "",
+                )
+            }
+            return
+        }
+        fetchUpdate(auto = true)
+    }
+
+    /** 设置页「立即检查」：不受 12 小时窗口限制 */
+    fun checkUpdateNow() {
+        if (updateCheckBusy) return
+        fetchUpdate(auto = false)
+    }
+
+    private fun fetchUpdate(auto: Boolean) {
+        if (updateCheckBusy) return
+        updateCheckBusy = true
+        if (!auto) updateCheckResult = ""
+        viewModelScope.launch {
+            val r = withContext(Dispatchers.IO) {
+                try {
+                    Result.success(UpdateCheck.fetchLatest())
+                } catch (e: UpdateException) {
+                    Result.failure(e)
+                } catch (e: Exception) {
+                    Result.failure(UpdateException("检查失败：${e.message ?: e.javaClass.simpleName}"))
+                }
+            }
+            updateCheckBusy = false
+            r.onSuccess { info ->
+                updatePrefs.edit()
+                    .putLong(KEY_UPDATE_AT, System.currentTimeMillis())
+                    .putString(KEY_UPDATE_TAG, info.tag)
+                    .putString(KEY_UPDATE_PAGE, info.pageUrl)
+                    .putString(KEY_UPDATE_APK, info.apkUrl)
+                    .apply()
+                latestVersionText = info.tag
+                if (UpdateCheck.isNewer(info.tag, APP_VERSION)) {
+                    updateAvailable = info
+                    updateCheckResult = "发现新版本 ${info.tag}（当前 $APP_VERSION）"
+                } else {
+                    updateAvailable = null
+                    updateCheckResult = "已是最新版本（${info.tag}）"
+                }
+            }.onFailure { e ->
+                // 到达过服务器（限流 / 解析失败）也记入窗口，避免反复轰炸；纯网络失败不计
+                if (e !is UpdateNetException) {
+                    updatePrefs.edit().putLong(KEY_UPDATE_AT, System.currentTimeMillis()).apply()
+                }
+                // 自动检查失败静默；手动检查给人话
+                if (!auto) updateCheckResult = e.message ?: "检查失败，请稍后再试"
+            }
+        }
+    }
+
+    init {
+        // 启动静默检查：延后 5 秒、协程 IO，不阻塞 UI、不抢焦点；只在有新版时才弹提示
+        viewModelScope.launch {
+            delay(5000)
+            autoCheckUpdateIfDue()
+        }
+    }
+
     /**
      * 拍照解题回填：把模型给的表达式插进主计算行并立即求值（复用主行解题管线），
      * 模型的解释文字显示在结果区附注里。
@@ -1167,5 +1285,13 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
         const val KEY_API_KEY = "api_key"
         const val KEY_API_MODEL = "api_model"
         const val KEY_API_TIMEOUT = "api_timeout_sec"
+
+        // ---- 批次 K5：检查更新持久化（独立 prefs 文件） ----
+        const val UPDATE_PREFS = "fx991_update"
+        const val KEY_UPDATE_AUTO = "auto_check"
+        const val KEY_UPDATE_AT = "last_check_ms"
+        const val KEY_UPDATE_TAG = "last_tag"
+        const val KEY_UPDATE_PAGE = "last_page_url"
+        const val KEY_UPDATE_APK = "last_apk_url"
     }
 }
