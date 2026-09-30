@@ -20,9 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -266,26 +264,8 @@ private fun Field(
     onChange: (String) -> Unit,
     modifier: Modifier,
 ) {
-    val c = LocalCalcColors.current
-    OutlinedTextField(
-        value = value,
-        onValueChange = onChange,
-        label = { Text(label, fontSize = 11.sp) },
-        singleLine = true,
-        textStyle = androidx.compose.ui.text.TextStyle(
-            fontFamily = Mono, fontSize = 14.sp, color = c.bodyInk
-        ),
-        colors = TextFieldDefaults.colors(
-            focusedContainerColor = c.keyNeutral,
-            unfocusedContainerColor = c.keyNeutral,
-            focusedIndicatorColor = ShiftOrange,
-            unfocusedIndicatorColor = c.keyEdge,
-            focusedLabelColor = ShiftOrange,
-            unfocusedLabelColor = c.bodyInk,
-            cursorColor = ShiftOrange,
-        ),
-        modifier = modifier,
-    )
+    // 批次 K3-B：与其他二级界面一致，走自然书写输入框（自家键盘 + 光标）
+    NumField(label, value, onChange, modifier)
 }
 
 /** ○ 曲线图：Canvas 手绘坐标轴 + 折线 */

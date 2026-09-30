@@ -21,7 +21,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -386,15 +385,8 @@ fun PhotoSolveScreen(vm: CalcViewModel, onBack: () -> Unit) {
                             color = c.bodyInk, fontSize = 13.sp, fontWeight = FontWeight.Bold,
                         )
                         Spacer(Modifier.height(6.dp))
-                        OutlinedTextField(
-                            value = confirmText,
-                            onValueChange = { confirmText = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            textStyle = androidx.compose.ui.text.TextStyle(
-                                color = c.bodyInk, fontFamily = Mono, fontSize = 15.sp,
-                            ),
-                            singleLine = true,
-                        )
+                        // 批次 K3-B：识别结果确认也走自然书写输入框（自家键盘 + 光标）
+                        NumField("表达式（可修改后再求值）", confirmText, { confirmText = it }, Modifier.fillMaxWidth())
                         if (localRaw.isNotBlank()) {
                             Spacer(Modifier.height(6.dp))
                             Box(

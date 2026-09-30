@@ -60,6 +60,21 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
     var expression by mutableStateOf("")
         private set
 
+    /** 批次 K3-A：主行可见光标 = 表达式字符串里的偏移量（0..length） */
+    var cursor by mutableStateOf(0)
+        private set
+
+    /** 批次 K3-B：二级界面自然输入的焦点状态（哪个字段在被自家键盘编辑） */
+    val natInput = io.paimon.fx991.ui.NatInput()
+
+    fun moveCursorLeft() {
+        cursor = io.paimon.fx991.ui.CursorModel.moveLeft(expression, cursor)
+    }
+
+    fun moveCursorRight() {
+        cursor = io.paimon.fx991.ui.CursorModel.moveRight(expression, cursor)
+    }
+
     var resultText by mutableStateOf("")
         private set
 
@@ -185,11 +200,13 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
         screen = target
         overlay = Overlay.NONE
         funcDialog = null
+        natInput.clear()
     }
 
     fun openFunc(kind: FuncKind) {
         funcDialog = newFuncDialog(kind, expression)
         overlay = Overlay.FUNC
+        natInput.dismiss()
         cancelLayers()
     }
 
@@ -257,23 +274,15 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
 
     val history = mutableStateListOf<HistoryEntry>()
 
-    private var justEvaluated = false
+    /** 求值后置位（此时主行显示结果、光标隐藏）；用 Compose 状态让 LCD 联动 */
+    var justEvaluated by mutableStateOf(false)
+        private set
     private var mrcArmed = false
     private var histCursor = -1
     private var lastValue: Double? = null
 
     /** 上一次的精确结果（用于 S⇔D 在分数/小数之间切换） */
     private var lastExact: io.paimon.fx991.engine.Value? = null
-
-    private val measurableAtoms = listOf(
-        "sin\u207B\u00B9(", "cos\u207B\u00B9(", "tan\u207B\u00B9(",
-        "asinh(", "acosh(", "atanh(", "sinh(", "cosh(", "tanh(", "cbrt(", "abs(",
-        "sin(", "cos(", "tan(",
-        "logb(", "log(", "ln(", "root(", "npr(", "ncr(", "exp(",
-        "fourier(", "cint(", "conj(", "res(",
-        "\u221A(", "sin\u207B\u00B9", "cos\u207B\u00B9", "tan\u207B\u00B9",
-        "10^", "Ans", "PreAns", "\u00D710^", "\u207B\u00B9"
-    )
 
     private fun memValue(): Double = if (memorySet) memory else 0.0
 
@@ -324,8 +333,11 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
             KeyAction.MPlus -> memoryOp(1.0)
             KeyAction.MMinus -> memoryOp(-1.0)
             KeyAction.Mrc -> mrc()
-            KeyAction.HistUp, KeyAction.PadUp, KeyAction.PadLeft -> historyUp()
-            KeyAction.HistDown, KeyAction.PadDown, KeyAction.PadRight -> historyDown()
+            KeyAction.HistUp, KeyAction.PadUp -> historyUp()
+            KeyAction.HistDown, KeyAction.PadDown -> historyDown()
+            // 批次 K3-A：方向键左右 = 主行光标移动（上下仍是历史）
+            KeyAction.PadLeft -> moveCursorLeft()
+            KeyAction.PadRight -> moveCursorRight()
             KeyAction.PadOk -> evaluateNow()
             KeyAction.Sd -> cycleDisplay()
             KeyAction.FracFormat -> cycleDisplay()
@@ -366,8 +378,11 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
             justEvaluated = false
             resultText = ""
             isError = false
+            cursor = expression.length
         } else {
-            expression += text
+            val r = io.paimon.fx991.ui.CursorModel.insert(expression, cursor, text)
+            expression = r.text
+            cursor = r.cursor
         }
         histCursor = -1
         solutionItems = emptyList()
@@ -377,6 +392,7 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun clearAll() {
         expression = ""
+        cursor = 0
         resultText = ""
         previewText = ""
         isError = false
@@ -453,17 +469,12 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
             justEvaluated = false
             resultText = ""
             isError = false
+            cursor = expression.length
         }
         if (expression.isEmpty()) return
-        for (a in measurableAtoms) {
-            if (expression.endsWith(a)) {
-                expression = expression.dropLast(a.length)
-                histCursor = -1
-                refreshPreview()
-                return
-            }
-        }
-        expression = expression.dropLast(1)
+        val r = io.paimon.fx991.ui.CursorModel.backspace(expression, cursor)
+        expression = r.text
+        cursor = r.cursor
         histCursor = -1
         refreshPreview()
     }
@@ -502,6 +513,7 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
         val src = CalcEngine.autoClose(expression)
         if (src.isBlank()) return
         expression = src
+        cursor = src.length
         solutionItems = emptyList()
         resultNote = ""
         try {
@@ -792,6 +804,7 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
         if (histCursor in history.indices) {
             expression = history[histCursor].expr
         }
+        cursor = expression.length
         refreshPreview()
     }
 
@@ -857,6 +870,7 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
         resultText = ""
         isError = false
         expression = expr
+        cursor = expr.length
         lastComplex = null
         polarFormShown = false
         solutionItems = emptyList()
@@ -874,6 +888,7 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
         solutionItems = emptyList()
         resultNote = ""
         expression = text
+        cursor = text.length
         refreshPreview()
     }
 
@@ -1082,6 +1097,7 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
         goto(Screen.CALC)
         justEvaluated = false
         expression = expr
+        cursor = expr.length
         resultText = ""
         previewText = ""
         isError = false

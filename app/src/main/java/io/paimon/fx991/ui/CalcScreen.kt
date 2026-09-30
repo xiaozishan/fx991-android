@@ -32,6 +32,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -67,7 +68,7 @@ import io.paimon.fx991.engine.SiPrefixes
 import io.paimon.fx991.engine.UnitConvert
 import io.paimon.fx991.engine.label
 
-const val APP_VERSION = "1.7.0-geogebra-fourier-cplx"
+const val APP_VERSION = "1.8.0-cursor"
 const val APP_REPO = "https://github.com/xiaozishan/workspace"
 
 @Composable
@@ -81,6 +82,7 @@ fun CalcApp(vm: CalcViewModel = viewModel()) {
         val c = LocalCalcColors.current
         // 根 Surface 铺满整屏（含状态栏 / 导航栏区域）——背景色 edgeto-edge，
         // 具体内容各自用 Modifier.safeAreaPadding() 避让系统 Insets。
+        CompositionLocalProvider(LocalNatInput provides vm.natInput) {
         Surface(Modifier.fillMaxSize(), color = c.body) {
             Box(Modifier.fillMaxSize()) {
                 when (vm.screen) {
@@ -119,7 +121,16 @@ fun CalcApp(vm: CalcViewModel = viewModel()) {
                     Overlay.SI -> SiPanel(vm)
                     Overlay.CLRCONFIRM -> ClearAllConfirmPanel(vm)
                 }
+                // 批次 K3-B：二级界面字段被点中后，浮出 App 自己的键盘面板
+                // （不弹系统输入法；画在覆盖层之上，功能对话框里的字段也能用）
+                val ni = vm.natInput
+                if (ni.focused != null) {
+                    Box(Modifier.align(Alignment.BottomCenter)) {
+                        NatKeyboardPanel(ni, Modifier.fillMaxWidth())
+                    }
+                }
             }
+        }
         }
     }
 }
@@ -770,13 +781,7 @@ private fun UnitConvPanel(vm: CalcViewModel) {
         Spacer(Modifier.height(5.dp))
         ChipWrap(cat.units.map { "${it.name} ${it.symbol}" }, toIdx) { toIdx = it }
         Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-            value = value,
-            onValueChange = { value = it },
-            label = { Text("数值", fontSize = 11.sp) },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
+        NumField("数值", value, { value = it }, Modifier.fillMaxWidth())
         Spacer(Modifier.height(10.dp))
         val parsed = value.trim().toDoubleOrNull()
         if (parsed == null) {
@@ -815,13 +820,7 @@ private fun SiPanel(vm: CalcViewModel) {
         Spacer(Modifier.height(5.dp))
         ChipWrap(SiPrefixes.ALL.map { it.symbol.ifEmpty { "—" } }, toIdx) { toIdx = it }
         Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-            value = value,
-            onValueChange = { value = it },
-            label = { Text("数值", fontSize = 11.sp) },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
+        NumField("数值", value, { value = it }, Modifier.fillMaxWidth())
         Spacer(Modifier.height(10.dp))
         val parsed = value.trim().toDoubleOrNull()
         if (parsed == null) {
@@ -943,13 +942,8 @@ private fun FuncPanel(vm: CalcViewModel) {
 
 @Composable
 private fun FuncField(label: String, value: String, onValueChange: (String) -> Unit) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        label = { Text(label, fontSize = 11.sp) },
-        singleLine = true,
-        modifier = Modifier.fillMaxWidth(),
-    )
+    // 批次 K3-B：功能对话框字段也走自然书写输入框（自家键盘 + 光标）
+    NumField(label, value, onValueChange, Modifier.fillMaxWidth())
     Spacer(Modifier.height(8.dp))
 }
 
@@ -1044,10 +1038,12 @@ private fun LcdScreen(vm: CalcViewModel, modifier: Modifier) {
         StatusBar(vm)
         Spacer(Modifier.height(4.dp))
         Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.BottomStart) {
+            // 批次 K3-A：编辑态画闪烁光标；求值后（看结果）光标隐藏
             LcdMathLine(
                 expr = vm.expression,
                 style = NatStyle(lcdFont(vm.expression.length), c.lcdFg),
                 modifier = Modifier.fillMaxSize(),
+                cursor = if (vm.justEvaluated || vm.overlay != Overlay.NONE) -1 else vm.cursor,
             )
         }
         Spacer(Modifier.height(2.dp))

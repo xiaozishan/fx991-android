@@ -84,7 +84,13 @@ internal fun SubHeader(title: String, subtitle: String? = null, onBack: () -> Un
     }
 }
 
-/** 单行数值输入框 */
+/**
+ * 单行数值输入框 —— 批次 K3-B 起改为**自然书写输入框**：
+ * 默认显示排版后的式子（只读），点一下进编辑态，不弹系统输入法，
+ * 由 App 自己的键盘面板接管（带闪烁光标、边输边排版、模板键全量）；
+ * 键盘面板上可一键切回系统键盘手打（如 1e-10 习惯写法）。
+ * 没有提供 LocalNatInput 的环境（理论上不会）退回原 OutlinedTextField。
+ */
 @Composable
 internal fun NumField(
     label: String,
@@ -92,6 +98,11 @@ internal fun NumField(
     onChange: (String) -> Unit,
     modifier: Modifier,
 ) {
+    val input = LocalNatInput.current
+    if (input != null) {
+        NatValueField(label, value, onChange, input, modifier)
+        return
+    }
     val c = LocalCalcColors.current
     OutlinedTextField(
         value = value,
