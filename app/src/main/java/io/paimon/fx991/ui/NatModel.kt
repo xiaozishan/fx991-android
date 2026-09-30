@@ -185,7 +185,14 @@ internal class NatParser(private val ts: List<DTok>) {
         DT.SQRT -> { i++; Nat.Sqrt(unary()) }
         DT.IDENT -> {
             val name = ts[i++].s
-            val arg = if (cur().t == DT.LP) group() else unary()
+            val arg = when {
+                cur().t == DT.LP -> group()
+                // 隐式参数（如 sin x、x y）只允许从 数字/标识符/根号/负号 开始；
+                // 绝不能吃 PLUS —— unary() 会静默吃掉 '+'，导致 "x+3" 渲染成 "x3"（修 pluskey bug）
+                cur().t == DT.NUM || cur().t == DT.IDENT ||
+                    cur().t == DT.SQRT || cur().t == DT.MINUS -> unary()
+                else -> Nat.Sym("")
+            }
             Nat.Row(listOf(Nat.Sym(name), arg))
         }
         DT.LP -> group()

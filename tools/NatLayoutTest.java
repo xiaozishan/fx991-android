@@ -88,6 +88,24 @@ public class NatLayoutTest {
         check("超长表达式仍为 3 行横排", lp.split("\n").length == 3);
 
         System.out.println();
+        System.out.println("== 回归护栏：变量后接 '+' 不被吃掉（v1.6.1-fix-pluskey） ==");
+        // 真机 bug：按 x 后按 + 「失灵」——实际是 NatParser.primary() 把标识符当函数名，
+        // 用 unary() 吃隐式参数时把 '+' 静默吞掉（x+3 渲染成 x3）。修复：隐式参数不从 PLUS 开始。
+        check("x+  → 尾部 '+' 必须显示", proj("x+").equals("x+"));
+        check("x+3 → '+' 不丢、3 不成隐式参数", proj("x+3").equals("x+3"));
+        check("2x+3=7 主推场景 → 完整显示", proj("2x+3=7").equals("2x+3=7"));
+        check("x+1=3 → 完整显示", proj("x+1=3").equals("x+1=3"));
+        check("3x\u22122=7 → 完整显示", proj("3x\u22122=7").equals("3x\u22122=7"));
+        check("Ans+1 → 寄存器标识符后 '+' 也不丢", proj("Ans+1").equals("Ans+1"));
+        check("PreAns+1 → 长标识符后 '+' 不丢", proj("PreAns+1").equals("PreAns+1"));
+        check("y+2 → 其它变量同样", proj("y+2").equals("y+2"));
+        // 对照组：隐式参数的正常用法不退化
+        check("x\u22123 → 负号仍可作隐式参数开头", proj("x\u22123").equals("x\u22123"));
+        check("x y → 标识符隐式参数保留", proj("x y").equals("xy"));
+        check("sin(2)+3 → 括号函数调用后 '+' 正常", proj("sin(2)+3").equals("sin(2)+3"));
+        check("x\u00D73 → '×' 不受影响", proj("x\u00D73").equals("x\u00D73"));
+
+        System.out.println();
         System.out.println("RESULT: pass=" + pass + "  fail=" + fail);
         if (fail > 0) System.exit(1);
     }

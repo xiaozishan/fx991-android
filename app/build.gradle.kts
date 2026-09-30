@@ -13,7 +13,7 @@ android {
         minSdk = 26
         targetSdk = 36
         versionCode = 1
-        versionName = "1.0.0"
+        versionName = "1.6.1-fix-pluskey"
 
         ndk {
             // 批次 F 起 ML Kit 带进 4 个 ABI 的 .so（合计约 41 MB），全打进去 APK 会胀到 53 MB。

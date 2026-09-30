@@ -67,7 +67,7 @@ import io.paimon.fx991.engine.SiPrefixes
 import io.paimon.fx991.engine.UnitConvert
 import io.paimon.fx991.engine.label
 
-const val APP_VERSION = "1.6.0-offline-ocr"
+const val APP_VERSION = "1.6.1-fix-pluskey"
 const val APP_REPO = "https://github.com/xiaozishan/workspace"
 
 @Composable
