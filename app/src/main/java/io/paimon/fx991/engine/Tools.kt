@@ -255,6 +255,9 @@ class Registers {
 
     fun get(name: String): Double? = vars[name]
 
+    /** 批次 G：代数区删除单个变量 */
+    fun remove(name: String): Boolean = vars.remove(name) != null
+
     /** 供表达式代入使用的变量表（仅 A–F / x / y） */
     fun snapshot(): Map<String, Double> = LinkedHashMap(vars)
 

@@ -17,6 +17,7 @@ import io.paimon.fx991.engine.CalcSyntaxError
 import io.paimon.fx991.engine.CalcValue
 import io.paimon.fx991.engine.ComplexRect
 import io.paimon.fx991.engine.EquationSolver
+import io.paimon.fx991.engine.FourierOps
 import io.paimon.fx991.engine.MatrixStore
 import io.paimon.fx991.engine.NumberNotation
 import io.paimon.fx991.engine.NumericError
@@ -29,6 +30,8 @@ import io.paimon.fx991.engine.Sexagesimal
 import io.paimon.fx991.engine.SolveItem
 import io.paimon.fx991.engine.SolveKind
 import io.paimon.fx991.engine.Unified
+import io.paimon.fx991.engine.UserFnDef
+import io.paimon.fx991.engine.UserFunctions
 import io.paimon.fx991.engine.Value
 import io.paimon.fx991.engine.VectorStore
 import io.paimon.fx991.ui.KeyAction
@@ -132,6 +135,34 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
     /** 矩阵 / 向量变量（统一输入面：主行可直接引用 MatA / VctA） */
     val matrixStore = MatrixStore()
     val vectorStore = VectorStore()
+
+    /** 批次 G：已定义的 GeoGebra 式用户函数（镜像 UserFunctions 登记表，代数区展示用） */
+    var definedFunctions by mutableStateOf<List<UserFnDef>>(emptyList())
+        private set
+
+    fun syncUserFuncs() {
+        definedFunctions = UserFunctions.list()
+    }
+
+    /** 代数区：删一个函数 */
+    fun removeUserFunction(name: String) {
+        UserFunctions.remove(name)
+        syncUserFuncs()
+    }
+
+    /** 代数区：直接输入定义（返回提示文案；非法抛 NumericError / CalcSyntaxError） */
+    fun defineFromAlgebra(src: String): String {
+        val def = UserFunctions.tryDefine(src.trim())
+            ?: throw NumericError("不是有效的定义；若函数已存在，请用 := 重定义")
+        syncUserFuncs()
+        return "已定义 ${def.fullText()}"
+    }
+
+    /** 代数区：删一个 STO 变量 */
+    fun removeVariable(name: String) {
+        registers.remove(name)
+        variables = registers.snapshot()
+    }
 
     /** 方程求解的多解列表（可逐条插入主行） */
     var solutionItems by mutableStateOf<List<SolveItem>>(emptyList())
@@ -239,6 +270,7 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
         "asinh(", "acosh(", "atanh(", "sinh(", "cosh(", "tanh(", "cbrt(", "abs(",
         "sin(", "cos(", "tan(",
         "logb(", "log(", "ln(", "root(", "npr(", "ncr(", "exp(",
+        "fourier(", "cint(", "conj(", "res(",
         "\u221A(", "sin\u207B\u00B9", "cos\u207B\u00B9", "tan\u207B\u00B9",
         "10^", "Ans", "PreAns", "\u00D710^", "\u207B\u00B9"
     )
@@ -371,6 +403,9 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
         clearAll()
         history.clear()
         registers.clearAll()
+        // 批次 G：自定义函数一并清空
+        UserFunctions.clear()
+        syncUserFuncs()
         memory = 0.0
         memorySet = false
         ans = 0.0
@@ -470,6 +505,17 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
         solutionItems = emptyList()
         resultNote = ""
         try {
+            // 批次 G：GeoGebra 式函数定义优先于方程判定（f(x)=x^2 定义；已定义时同形按方程解）
+            val defined = UserFunctions.tryDefine(src)
+            if (defined != null) {
+                presentDefinition(src, defined)
+                return
+            }
+            // 批次 G：傅里叶主行 fourier(f(x), 下限, 上限, 项数)
+            if (Regex("^fourier\\s*\\(", RegexOption.IGNORE_CASE).containsMatchIn(src.trim())) {
+                runFourier(src)
+                return
+            }
             // REFERENCE 第 7 条：含未知变量且带 `=` → 当方程求根；不含未知变量 → 普通求值
             if (EquationSolver.looksLikeEquation(src)) {
                 if (EquationSolver.unknowns(src).isNotEmpty()) {
@@ -484,6 +530,7 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
                 presentValue(src, Unified.evaluate(
                     lhs, angleMode, ans, memValue(), lastExact, preAns, varsMap(), matrixStore, vectorStore,
                 ))
+                if (Unified.lastNote.isNotEmpty()) resultNote = Unified.lastNote
                 return
             }
             // REFERENCE 第 6 条：主行统一输入面（标量 / 复数 / 矩阵 / 向量 / 统计 / 分布）
@@ -491,8 +538,19 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
                 src, angleMode, ans, memValue(), lastExact, preAns, varsMap(), matrixStore, vectorStore,
             )
             presentValue(src, v)
-        } catch (_: CalcSyntaxError) {
-            syntaxError()
+            if (Unified.lastNote.isNotEmpty()) resultNote = Unified.lastNote
+        } catch (e: CalcSyntaxError) {
+            // 批次 G：带具体原因的语法错误（如「不能用这个名字定义函数」）直接展示
+            val msg = e.message
+            if (!msg.isNullOrBlank() && msg != "语法错误") {
+                resultText = msg
+                previewText = ""
+                isError = true
+                solutionItems = emptyList()
+                justEvaluated = false
+            } else {
+                syntaxError()
+            }
         } catch (_: CalcMathError) {
             mathError()
         } catch (e: NumericError) {
@@ -503,6 +561,47 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
             justEvaluated = false
         } catch (_: Exception) {
             mathError()
+        }
+    }
+
+    /** 批次 G：函数定义结果的呈现（进历史，可继续运算） */
+    private fun presentDefinition(src: String, def: UserFnDef) {
+        resultText = "已定义 ${def.fullText()}"
+        resultNote = "之后可直接用：${def.name}(3) · ${def.name}'(2) · 嵌套调用；MODE → 代数区 可查看 / 改 / 删"
+        previewText = ""
+        isError = false
+        solutionItems = emptyList()
+        lastComplex = null
+        lastExact = null
+        syncUserFuncs()
+        pushHistory(src, resultText)
+        justEvaluated = true
+    }
+
+    /** 批次 G：傅里叶主行 fourier(f(x), a, b, n) —— 系数 + 奇偶 + 部分和 */
+    private fun runFourier(src: String) {
+        try {
+            val args = FourierOps.parseMain(src)
+                ?: throw NumericError("fourier 用法：fourier(f(x), 下限, 上限, 项数)")
+            val r = FourierOps.compute(args.f, args.a, args.b, args.n)
+            resultText = FourierOps.formatReport(r)
+            resultNote = "系数为自适应 Simpson 数值积分（弧度制）；末行是部分和 S${r.n}(x)"
+            previewText = ""
+            isError = false
+            // 部分和表达式可点一下带回主行（注意主行三角函数跟随角度制）
+            solutionItems = listOf(SolveItem("代入 S${r.n}(x)", FourierOps.partialSumExpr(r)))
+            lastComplex = null
+            lastExact = null
+            pushHistory(src, "fourier → a0=${CalcEngine.format(r.a0, 10, null)} …")
+            justEvaluated = true
+        } catch (e: NumericError) {
+            resultText = e.message ?: "数值错误"
+            previewText = ""
+            isError = true
+            solutionItems = emptyList()
+            justEvaluated = false
+        } catch (e: CalcSyntaxError) {
+            syntaxError()
         }
     }
 
@@ -591,8 +690,40 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         val src = CalcEngine.autoClose(expression)
-        if (src.isBlank() || src.contains('=')) {
+        if (src.isBlank()) {
             previewText = ""
+            return
+        }
+        // 批次 G：GeoGebra 定义外形预览（f(x)=… / f(x):=…）
+        val shape = try {
+            UserFunctions.definitionShape(src)
+        } catch (_: Exception) {
+            null
+        }
+        if (shape != null) {
+            previewText = if (UserFunctions.contains(shape.name) && !shape.colonEq) {
+                "${shape.name} 已定义：按 = 当方程求解，重定义请用 :="
+            } else {
+                "按 = 定义 ${shape.name}(${shape.params.joinToString(",")}) = ${shape.bodyText}"
+            }
+            return
+        }
+        // 批次 G：傅里叶主行预览
+        if (Regex("^fourier\\s*\\(", RegexOption.IGNORE_CASE).containsMatchIn(src.trim())) {
+            previewText = "按 = 计算傅里叶系数"
+            return
+        }
+        if (src.contains('=')) {
+            // 批次 G：方程即输即解（无歧义时预览直接给解，按 = 确认）
+            previewText = try {
+                if (EquationSolver.unknowns(src).isEmpty()) ""
+                else {
+                    val r = EquationSolver.solve(src, angleMode)
+                    if (r.kind == SolveKind.ERROR) "" else r.text + "（按 = 确认）"
+                }
+            } catch (_: Exception) {
+                ""
+            }
             return
         }
         previewText = try {
@@ -600,7 +731,10 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
                 src, angleMode, ans, memValue(), lastExact, preAns, varsMap(), matrixStore, vectorStore,
             )) {
                 is CalcValue.Scalar ->
-                    if (abs(v.c.im.toDouble()) > 1e-12) "" else formatValue(v.c.re)
+                    // 批次 G：复数结果也实时预览（i / ∠ / res / cint）
+                    if (abs(v.c.im.toDouble()) > 1e-12) {
+                        rectText(ComplexRect(v.c.re.toDouble(), v.c.im.toDouble()))
+                    } else formatValue(v.c.re)
                 is CalcValue.MatVal -> ""
                 is CalcValue.VecVal -> ""
             }

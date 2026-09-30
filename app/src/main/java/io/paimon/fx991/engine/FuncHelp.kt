@@ -34,6 +34,9 @@ object FuncHelp {
     const val CAT_UNIFIED = "矩阵 / 向量（主行可用）"
     const val CAT_STAT = "统计 / 分布（主行可调）"
     const val CAT_EQUATION = "方程求解（主行）"
+    const val CAT_GEOGEBRA = "自定义函数（GeoGebra 式）"
+    const val CAT_FOURIER = "傅里叶级数（主行）"
+    const val CAT_CPLXF = "复变函数（主行）"
 
     @JvmField
     val ALL: List<FuncHelpEntry> = listOf(
@@ -115,6 +118,20 @@ object FuncHelp {
         // ---- 主行求解（REFERENCE 第 7 条）----
         FuncHelpEntry("方程等号", CAT_EQUATION, "左式 = 右式", "含未知量时按 = 即求解（如 2x+3=7）", "=", "1+1"),
         FuncHelpEntry("方程组", CAT_EQUATION, "式1, 式2", "用逗号或分号分隔（如 2x+y=5, x-y=1）", ",", "1+1"),
+
+        // ---- 批次 G：自定义函数（GeoGebra 式）----
+        FuncHelpEntry("定义函数", CAT_GEOGEBRA, "f(x) = x^2", "主行定义函数；之后 f(3)、f(x)+1、嵌套调用直接可用；代数区可查看/改/删", "f(x)=x^2", "1+1"),
+        FuncHelpEntry("重定义", CAT_GEOGEBRA, "f(x) := x^3", ":= 强制重定义已存在的函数；同名再写 = 会当方程求解", "f(x):=x^3", "1+1"),
+        FuncHelpEntry("调用与求导", CAT_GEOGEBRA, "f(3) · f'(2)", "调用已定义函数；' 一阶导、'' 二阶导（仅单变量函数）", "f'(", "1+1"),
+
+        // ---- 批次 G：傅里叶级数 ----
+        FuncHelpEntry("fourier", CAT_FOURIER, "fourier(f(x), a, b, n)", "傅里叶级数展开：区间 [a,b] 上前 n 项 a0/an/bn 与部分和；奇偶自动识别；弧度制", "fourier(", "fourier(1, 0, 1, 1)"),
+
+        // ---- 批次 G：复变函数 ----
+        FuncHelpEntry("i", CAT_CPLXF, "i", "虚数单位：exp(i*π) = −1；复函数取主值分支（辐角 ∈ (−π, π]）", "i", "i"),
+        FuncHelpEntry("conj", CAT_CPLXF, "conj(z)", "复共轭（实数时不变）；模 abs(z)、辐角见 CMPLX 模式", "conj(", "conj(2)"),
+        FuncHelpEntry("res", CAT_CPLXF, "res(f(z), z0)", "留数：自动判定极点阶数（1–8），可去奇点明说，本性奇点拒绝", "res(", "res(1/z, 0)"),
+        FuncHelpEntry("cint", CAT_CPLXF, "cint(f(z), p1, …)", "留数定理围道积分 ∮f dz = 2πi·ΣRes（列出围道内全部极点）", "cint(", "cint(1/z, 0)"),
     )
 
     /** 按类别分组（保持定义顺序） */

@@ -67,7 +67,7 @@ import io.paimon.fx991.engine.SiPrefixes
 import io.paimon.fx991.engine.UnitConvert
 import io.paimon.fx991.engine.label
 
-const val APP_VERSION = "1.6.1-fix-pluskey"
+const val APP_VERSION = "1.7.0-geogebra-fourier-cplx"
 const val APP_REPO = "https://github.com/xiaozishan/workspace"
 
 @Composable
@@ -98,6 +98,10 @@ fun CalcApp(vm: CalcViewModel = viewModel()) {
                     Screen.RATIO -> RatioScreen(onBack = { vm.goto(Screen.CALC) })
                     // ---- 批次 E ----
                     Screen.PHOTO_SOLVE -> PhotoSolveScreen(vm, onBack = { vm.goto(Screen.CALC) })
+                    // ---- 批次 G ----
+                    Screen.ALGEBRA -> AlgebraScreen(vm, onBack = { vm.goto(Screen.CALC) })
+                    Screen.FOURIER -> FourierScreen(onBack = { vm.goto(Screen.CALC) })
+                    Screen.CPLXF -> CplxFuncScreen(onBack = { vm.goto(Screen.CALC) })
                     else -> CalcSurface(vm)
                 }
                 when (vm.overlay) {

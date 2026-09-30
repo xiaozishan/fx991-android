@@ -60,7 +60,7 @@ class CalcMathError(message: String) : Exception(message)
 
 internal enum class Tok {
     NUM, IDENT, PLUS, MINUS, MUL, DIV, POW,
-    FACT, PCT, SQ2, CUBE, RECIP, LP, RP, SQRT, COMMA, ANGLE, DOT, END
+    FACT, PCT, SQ2, CUBE, RECIP, LP, RP, SQRT, COMMA, ANGLE, DOT, PRIME, END
 }
 
 internal class Token(val t: Tok, val s: String)
@@ -97,6 +97,8 @@ internal class Lexer(private val src: String) {
                 c == ',' -> { out.add(Token(Tok.COMMA, ",")); i++ }
                 c == '\u2220' -> { out.add(Token(Tok.ANGLE, "\u2220")); i++ }
                 c == '\u00B7' -> { out.add(Token(Tok.DOT, "\u00B7")); i++ }
+                // 批次 G：导数撇号 f'(x)（′ 与 ' 等价）
+                c == '\'' || c == '\u2032' -> { out.add(Token(Tok.PRIME, "'")); i++ }
                 c == CH_SQRT -> { out.add(Token(Tok.SQRT, "\u221A")); i++ }
                 c == CH_SQ2 -> { out.add(Token(Tok.SQ2, "\u00B2")); i++ }
                 c == CH_CUBE -> { out.add(Token(Tok.CUBE, "\u00B3")); i++ }
@@ -192,11 +194,19 @@ internal sealed class Node {
 
     /** 可变参数函数：mean / sd / ssd / normcdf / binompdf … */
     class FnN(val name: String, val args: List<Node>) : Node()
+
+    // ---- 批次 G：GeoGebra 式自定义函数 + 复变 ----
+
+    /** 虚数单位 i（复变扩展；标量轨报数学错误，统一输入面按复数求值） */
+    data object IRef : Node()
+
+    /** 用户自定义函数调用：f(3) / f(x)+1 / f'(2)（deriv = 导数阶数 0/1/2） */
+    class UFn(val name: String, val args: List<Node>, val deriv: Int) : Node()
 }
 
 internal val FUNC_NAMES = setOf(
     "sin", "cos", "tan", "asin", "acos", "atan", "log", "ln", "exp", "sqrt",
-    "sinh", "cosh", "tanh", "asinh", "acosh", "atanh", "cbrt", "abs"
+    "sinh", "cosh", "tanh", "asinh", "acosh", "atanh", "cbrt", "abs", "conj"
 )
 
 /** STO 变量名（A–F），大小写不敏感只在单字母且为大写时生效 */
@@ -207,13 +217,15 @@ internal val FUNC2_NAMES = setOf("logb", "root", "npr", "ncr")
 /** 矩阵单参函数：det(MatA) / inv(MatA) / trn(MatA) */
 internal val MAT_FUNC_NAMES = setOf("det", "inv", "trn")
 
-/** 统一输入面的可变参数函数（1~4 个参数）：统计 / 分布 / 向量 */
+/** 统一输入面的可变参数函数（1~4 个参数）：统计 / 分布 / 向量；
+ *  批次 G 再加 res / cint（复变，首参为 z 表达式）与 fourier（主行拦截，这里只为解析放行） */
 internal val VARARG_NAMES = setOf(
     "mean", "sd", "ssd", "sigma",
     "cross", "dot",
     "normpdf", "normcdf", "invnorm",
     "binompdf", "binomcdf",
     "poissonpdf", "poissoncdf",
+    "res", "cint", "fourier",
 )
 
 // ---------------------------------------------------------------------------
@@ -228,7 +240,7 @@ internal val VARARG_NAMES = setOf(
 //   primary -> NUM | CONST | FUNC '(' expr ')' | '√' unary | '(' expr ')'
 // ---------------------------------------------------------------------------
 
-internal class Parser(private val ts: List<Token>) {
+internal class Parser(private val ts: List<Token>, private val extraIdents: Set<String> = emptySet()) {
     private var i = 0
 
     private fun cur(): Token = ts[i]
@@ -373,7 +385,11 @@ internal class Parser(private val ts: List<Token>) {
             "x" -> return Node.XRef
             "y" -> return Node.YRef
             "z" -> return Node.ZRef
+            // 批次 G：虚数单位 i（统一输入面按复数求值）
+            "i" -> return Node.IRef
         }
+        // 批次 G：函数定义体的形参（定义 f(t)=t^2 时 t 是合法变量）
+        if (text in extraIdents) return Node.VarRef(text)
         // 矩阵 / 向量变量：MatA–MatD / VctA–VctD
         if (text.length == 4 && text.startsWith("Mat") && text[3] in 'A'..'D') {
             return Node.MatRef(text.substring(3))
@@ -415,7 +431,23 @@ internal class Parser(private val ts: List<Token>) {
             if (!eat(Tok.RP)) throw CalcSyntaxError("缺少右括号")
             return Node.FnN(name, args)
         }
-        if (name !in FUNC_NAMES) throw CalcSyntaxError("语法错误")
+        if (name !in FUNC_NAMES) {
+            // 批次 G：GeoGebra 式自定义函数 f(3) / f(x)+1 / f'(2) / f''(x)
+            if (UserFunctions.contains(text)) {
+                var deriv = 0
+                while (eat(Tok.PRIME)) deriv++
+                if (deriv > 2) throw CalcSyntaxError("最多支持二阶导数")
+                if (!eat(Tok.LP)) throw CalcSyntaxError("函数 ${text} 需要括号参数")
+                val args = ArrayList<Node>()
+                if (ts[i].t != Tok.RP) {
+                    args.add(expr())
+                    while (eat(Tok.COMMA)) args.add(expr())
+                }
+                if (!eat(Tok.RP)) throw CalcSyntaxError("缺少右括号")
+                return Node.UFn(text, args, deriv)
+            }
+            throw CalcSyntaxError("语法错误")
+        }
         val arg = if (ts[i].t == Tok.LP) paren() else unary()
         return Node.Fn(name, arg)
     }
@@ -520,6 +552,7 @@ internal object MathOps {
                 if (x < 0.0) -mag else mag
             }
             "abs" -> abs(x)
+            "conj" -> x   // 实数的共轭是它自己；复数走 ComplexFunc
             else -> throw CalcSyntaxError("语法错误")
         }
         if (r.isNaN() || r.isInfinite()) throw CalcMathError("数学错误")
@@ -604,6 +637,9 @@ private class Evaluator(
         }
         is Node.Fn -> MathOps.fn(mode, n.name, eval(n.a))
         is Node.Fn2 -> MathOps.fn2(n.name, eval(n.a), eval(n.b))
+        // 批次 G：浮点轨也支持自定义函数（∫dx / d/dx / Σ 等存量通道自动可用）
+        is Node.UFn -> UserFunctions.callD(n.name, n.args.map { eval(it) }, n.deriv, mode)
+        is Node.IRef,
         is Node.Polar, is Node.Dot, is Node.MatRef, is Node.VecRef, is Node.FnN ->
             throw CalcMathError("数学错误")
     }
@@ -662,6 +698,9 @@ internal class ValueEvaluator(
         is Node.Sqrt -> sqrtValue(eval(n.a))
         is Node.Fn -> fn1(n.name, eval(n.a))
         is Node.Fn2 -> fn2(n.name, eval(n.a), eval(n.b))
+        // 批次 G：自定义函数（精确轨照常：f(x)=x^2 后 f(3) 仍是精确 9）
+        is Node.UFn -> UserFunctions.call(n.name, n.args.map { eval(it) }, n.deriv, mode)
+        is Node.IRef,
         is Node.Polar, is Node.Dot, is Node.MatRef, is Node.VecRef, is Node.FnN ->
             throw CalcMathError("数学错误")
     }

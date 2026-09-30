@@ -88,6 +88,8 @@ internal fun dlex(src: String): List<DTok> {
             c == ';' -> { out.add(DTok(DT.SEMI, ";")); i++ }
             c == '\u00B7' -> { out.add(DTok(DT.DOT, "\u00B7")); i++ }
             c == '\u2220' -> { out.add(DTok(DT.ANGLE, "\u2220")); i++ }
+            // 批次 G：导数撇号 f'(x) 在自然书写里原样画出
+            c == '\'' || c == '\u2032' -> { out.add(DTok(DT.IDENT, "'")); i++ }
             c in SUP_ALL || c == CH_SUP_MINUS -> {
                 val s = i
                 while (i < src.length && (src[i] in SUP_ALL || src[i] == CH_SUP_MINUS)) i++

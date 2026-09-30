@@ -104,6 +104,10 @@ fun modeEntries(): List<ModeEntry> = listOf(
     ModeEntry("概率分布", Screen.DISTR),
     ModeEntry("函数帮助", Screen.FUNC_HELP),
     ModeEntry("比例", Screen.RATIO),
+    // ---- 批次 G ----
+    ModeEntry("代数区（自定义函数）", Screen.ALGEBRA),
+    ModeEntry("傅里叶级数", Screen.FOURIER),
+    ModeEntry("复变函数", Screen.CPLXF),
 )
 
 /** 顶栏：菜单 · PRO · Σ · 齿轮 · ± · 相机 ｜ MORE · DEG */

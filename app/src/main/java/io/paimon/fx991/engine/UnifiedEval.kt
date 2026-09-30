@@ -31,6 +31,10 @@ sealed interface CalcValue {
 
 object Unified {
 
+    /** 复函数主值分支等附注（求值开始时清空，结束后由界面读取） */
+    @JvmStatic
+    var lastNote: String = ""
+
     /**
      * 主计算行求值。失败抛 [CalcSyntaxError] / [CalcMathError] / [NumericError]。
      *
@@ -51,6 +55,7 @@ object Unified {
         mats: MatrixStore? = null,
         vecs: VectorStore? = null,
     ): CalcValue {
+        lastNote = ""
         val ast = Parser(Lexer(expr).lex()).parse()
         val ansValue = lastExact ?: Value.Floating(ans)
         val ev = UnifiedEvaluator(mode, ansValue, Value.Floating(mem), preAns, vars, mats, vecs)
@@ -109,6 +114,15 @@ internal class UnifiedEvaluator(
         // 纯标量子表达式：原样交给双轨内核，语义与 evaluateValue 完全一致
         if (!hasNew(n)) return CalcValue.Scalar(ComplexNum(scalar.eval(n), zeroV))
         return when (n) {
+            is Node.IRef -> CalcValue.Scalar(ComplexNum(zeroV, oneV))
+            is Node.UFn -> {
+                val args = n.args.map {
+                    val c = one(eval(it))
+                    if (abs(c.im.toDouble()) > 1e-9) throw CalcMathError("自定义函数参数需为实数")
+                    c.re
+                }
+                CalcValue.Scalar(ComplexNum(UserFunctions.call(n.name, args, n.deriv, mode), zeroV))
+            }
             is Node.Polar -> polar(one(eval(n.r)), one(eval(n.t)))
             is Node.Dot -> dotOp(eval(n.a), eval(n.b))
             is Node.MatRef -> {
@@ -119,7 +133,13 @@ internal class UnifiedEvaluator(
                 val v = vecs?.get(n.name) ?: throw CalcMathError("未定义向量 Vct${n.name}")
                 CalcValue.VecVal(v)
             }
-            is Node.FnN -> fnN(n.name, n.args.map { eval(it) })
+            is Node.FnN -> when (n.name) {
+                // 批次 G：复变 —— 首参是 z 的表达式（不求值），直接交给 ComplexFunc
+                "res" -> cplxRes(n.args)
+                "cint" -> cplxCint(n.args)
+                "fourier" -> throw CalcMathError("fourier 请单独作为主行表达式按 = 计算")
+                else -> fnN(n.name, n.args.map { eval(it) })
+            }
             is Node.Neg -> CalcValue.Scalar(negC(one(eval(n.a))))
             is Node.Add -> add(eval(n.a), eval(n.b))
             is Node.Sub -> sub(eval(n.a), eval(n.b))
@@ -224,7 +244,9 @@ internal class UnifiedEvaluator(
             }
             return ComplexNum(Value.of(MathOps.pow(a.re.toDouble(), b.re.toDouble())), zeroV)
         }
-        throw CalcMathError("数学错误")
+        // 批次 G：复数幂（主值分支 a^b = exp(b·Ln a)；整数次幂连乘）
+        Unified.lastNote = ComplexFunc.BRANCH_NOTE
+        return ComplexFunc.toComplex(ComplexFunc.powC(ComplexFunc.toCx(a), ComplexFunc.toCx(b)))
     }
 
     private fun powIntC(a: ComplexNum, k: Int): ComplexNum {
@@ -266,7 +288,11 @@ internal class UnifiedEvaluator(
     private fun recipC(c: ComplexNum): ComplexNum = oneI.div(c)
 
     private fun sqrtC(c: ComplexNum): ComplexNum {
-        if (abs(c.im.toDouble()) > 1e-12) throw CalcMathError("数学错误")
+        // 批次 G：复数开方（主值分支，负实轴上映到正虚轴）
+        if (abs(c.im.toDouble()) > 1e-12) {
+            Unified.lastNote = ComplexFunc.BRANCH_NOTE
+            return ComplexFunc.fn1Value("sqrt", c)
+        }
         val e = c.re.exact
         if (e != null) {
             if (e.signum < 0) throw CalcMathError("数学错误")
@@ -286,12 +312,21 @@ internal class UnifiedEvaluator(
                 return CalcValue.Scalar(ComplexNum(value, zeroV))
             }
             val c = one(v)
-            if (abs(c.im.toDouble()) > 1e-12) throw CalcMathError("数学错误")
+            // 批次 G：复数的 abs 是模 |z|
+            if (abs(c.im.toDouble()) > 1e-12) {
+                return CalcValue.Scalar(ComplexNum(Value.of(c.modulus()), zeroV))
+            }
             val e = c.re.exact
             if (e != null) return CalcValue.Scalar(ComplexNum(Value.of(e.abs()), zeroV))
             return CalcValue.Scalar(ComplexNum(Value.of(abs(c.re.toDouble())), zeroV))
         }
         val c = one(v)
+        // 批次 G：复数参数的初等函数（exp/ln/三角/双曲/conj，主值分支给提示）
+        if (abs(c.im.toDouble()) > 1e-12) {
+            if (name !in ComplexFunc.FN1_NAMES) throw CalcMathError("复数暂不支持函数 $name")
+            if (ComplexFunc.isBranchy(name)) Unified.lastNote = ComplexFunc.BRANCH_NOTE
+            return CalcValue.Scalar(ComplexFunc.fn1Value(name, c))
+        }
         return CalcValue.Scalar(ComplexNum(Value.of(MathOps.fn(mode, name, real(c))), zeroV))
     }
 
@@ -366,6 +401,26 @@ internal class UnifiedEvaluator(
         return d.toInt()
     }
 
+    // ---- 批次 G：复变（留数 / 围道积分） ----
+
+    /** res(f(z), z0)：留数；首参不求值，直接交给 ComplexFunc */
+    private fun cplxRes(args: List<Node>): CalcValue {
+        if (args.size != 2) throw CalcSyntaxError("res 需要两个参数：res(f(z), z0)")
+        val z0 = ComplexFunc.toCx(one(eval(args[1])))
+        val r = ComplexFunc.residue(args[0], z0)
+        Unified.lastNote = r.note
+        return CalcValue.Scalar(ComplexFunc.toComplex(r.value))
+    }
+
+    /** cint(f(z), p1, p2, …)：留数定理围道积分 ∮f dz = 2πi·ΣRes */
+    private fun cplxCint(args: List<Node>): CalcValue {
+        if (args.size < 2) throw CalcSyntaxError("cint 需要 f(z) 与至少一个极点：cint(f(z), p1, …)")
+        val poles = args.drop(1).map { ComplexFunc.toCx(one(eval(it))) }
+        val (value, note) = ComplexFunc.contourByResidues(args[0], poles)
+        Unified.lastNote = note
+        return CalcValue.Scalar(ComplexFunc.toComplex(value))
+    }
+
     private fun mat(args: List<CalcValue>, i: Int, fn: String): Matrix {
         val a = args.getOrNull(i) ?: throw CalcSyntaxError("$fn 需要矩阵参数")
         return (a as? CalcValue.MatVal)?.m ?: throw CalcMathError("$fn 需要矩阵参数")
@@ -380,6 +435,8 @@ internal class UnifiedEvaluator(
 
     private fun hasNew(n: Node): Boolean = when (n) {
         is Node.Polar, is Node.Dot, is Node.MatRef, is Node.VecRef, is Node.FnN -> true
+        // 批次 G：虚数单位与自定义函数也走联合求值（才能容纳复数结果）
+        is Node.IRef, is Node.UFn -> true
         is Node.Neg -> hasNew(n.a)
         is Node.Add -> hasNew(n.a) || hasNew(n.b)
         is Node.Sub -> hasNew(n.a) || hasNew(n.b)

@@ -21,4 +21,9 @@ enum class Screen(val title: String) {
 
     // ---- 批次 E：拍照解题（AI 视觉识别 → 回填主行） ----
     PHOTO_SOLVE("拍照解题"),
+
+    // ---- 批次 G：GeoGebra 式代数区 / 傅里叶级数 / 复变函数 ----
+    ALGEBRA("代数区"),
+    FOURIER("傅里叶级数"),
+    CPLXF("复变函数"),
 }
