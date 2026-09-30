@@ -52,8 +52,8 @@ data class ApiConfig(
 data class ApiPreset(val name: String, val baseUrl: String, val model: String, val note: String)
 
 val API_PRESETS: List<ApiPreset> = listOf(
-    ApiPreset("DeepSeek", "https://api.deepseek.com/v1", "deepseek-chat",
-        "该平台目前主要是纯文本模型，识图能力以其官方说明为准"),
+    ApiPreset("DeepSeek", "https://api.deepseek.com/v1", "deepseek-v4-flash-vision-exp",
+        "带 vision 后缀的就是视觉模型（deepseek-v4-flash-vision-exp）"),
     ApiPreset("智谱 GLM", "https://open.bigmodel.cn/api/paas/v4", "glm-4v-flash",
         "glm-4v 系列支持图片输入"),
     ApiPreset("Kimi（Moonshot）", "https://api.moonshot.cn/v1", "moonshot-v1-8k-vision-preview",

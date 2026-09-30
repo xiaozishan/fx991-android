@@ -488,7 +488,7 @@ Value = Exact(Rational) | Floating(Double)
 - 分数分子/分母不做千位分组（避免与隐式乘法歧义）
 - 设置项（主题/角度制/精度等）为进程内状态，不落盘持久化；**解题 API 配置例外**（SharedPreferences 明文落盘，界面已告知）
 - 批次 E：拍照解题的照片会压缩后发给**用户自己配置**的服务商；`usesCleartextTraffic="true"` 允许 `http://` 自建地址（本应用无内置云端，唯一网络出口即该 API）
-- 批次 E：JSON 用**手写最小实现**而非 org.json——org.json 在纯 JVM 回归环境不可用，手写版可测且范围等价；DeepSeek 预设的模型是纯文本模型（其官方暂无视觉 API），识图需以服务商实际能力为准
+- 批次 E：JSON 用**手写最小实现**而非 org.json——org.json 在纯 JVM 回归环境不可用，手写版可测且范围等价；DeepSeek 预设指向 **`deepseek-v4-flash-vision-exp`**（**带 vision 的就是视觉模型，可识图**）
 - STO 变量（A–F / x / y）存的是 **Double**（不保留精确分数），引用时按浮点参与运算
 - CLR ALL **会连同设置一起重置**（主题 / 角度制 / 精度 / 数字格式都回默认）——这是「全清」的语义
 - `Ran#` 在按键时**当场取一个随机字面量**插入表达式（不引入随机函数记号）
