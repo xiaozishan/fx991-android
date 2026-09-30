@@ -155,5 +155,5 @@ enum class Overlay {
     CLRCONFIRM,
 }
 
-/** MODE 菜单条目；screen 为空 = 尚未实现（置灰标注「待实现」） */
+/** MODE 菜单条目（批次 D 后全部模式都有真入口） */
 class ModeEntry(val title: String, val screen: Screen?)

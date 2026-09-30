@@ -31,7 +31,6 @@ sealed interface KeyAction {
     data object PadLeft : KeyAction
     data object PadRight : KeyAction
     data object PadOk : KeyAction
-    data object ThemeToggle : KeyAction
 
     // ---- 批次 A：顶栏 6 项 + 数值功能入口 ----
     data object Menu : KeyAction
@@ -65,7 +64,7 @@ sealed interface KeyAction {
 }
 
 /** 手绘矢量图标（不引任何图片/图标资源） */
-enum class KeyIcon { NONE, MENU, PRO, SIGMA, GEAR, PLUSMINUS, THEME, CAMERA, BACKSPACE }
+enum class KeyIcon { NONE, MENU, PRO, SIGMA, GEAR, PLUSMINUS, CAMERA, BACKSPACE }
 
 /** 键帽分类（决定配色） */
 enum class KeyKind { UTIL, PRO, MORE, DIGIT, FUNC, OP, EQUALS, DANGER, MEM, SHIFT, ALPHA, NAV }
@@ -91,20 +90,20 @@ data class Key(
 
 private fun ins(t: String) = KeyAction.Insert(t)
 
-/** MODE 菜单：已实现的给 Screen，未实现的置灰标「待实现」 */
+/** MODE 菜单：全部模式均已实现（批次 D 补齐了最后 4 个） */
 fun modeEntries(): List<ModeEntry> = listOf(
     ModeEntry("计算", Screen.CALC),
     ModeEntry("微分方程", Screen.ODE),
-    ModeEntry("方程（多项式 / 联立）", null),
+    ModeEntry("方程（多项式 / 联立）", Screen.EQUATION),
     ModeEntry("矩阵", Screen.MATRIX),
     ModeEntry("向量", Screen.VECTOR),
     ModeEntry("统计与回归", Screen.STAT),
     ModeEntry("复数", Screen.CMPLX),
-    ModeEntry("基数换算", null),
-    ModeEntry("函数表", null),
+    ModeEntry("基数换算", Screen.BASEN),
+    ModeEntry("函数表", Screen.TABLE),
     ModeEntry("概率分布", Screen.DISTR),
     ModeEntry("函数帮助", Screen.FUNC_HELP),
-    ModeEntry("比例", null),
+    ModeEntry("比例", Screen.RATIO),
 )
 
 /** 顶栏：菜单 · PRO · Σ · 齿轮 · ± · 相机 ｜ MORE · DEG */
@@ -199,7 +198,8 @@ fun keypadRows(): List<List<Key>> = listOf(
         Key("4", KeyKind.DIGIT, ins("4"), shift = SubKey("STAT", KeyAction.GoScreen(Screen.STAT))),
         Key("5", KeyKind.DIGIT, ins("5"), shift = SubKey("CMPLX", KeyAction.GoScreen(Screen.CMPLX))),
         Key("6", KeyKind.DIGIT, ins("6"), shift = SubKey("DISTR", KeyAction.GoScreen(Screen.DISTR))),
-        Key("\u00D7", KeyKind.OP, ins("\u00D7"), shift = SubKey("Pol", KeyAction.OpenFunc(FuncKind.POL))),
+        Key("\u00D7", KeyKind.OP, ins("\u00D7"), shift = SubKey("Pol", KeyAction.OpenFunc(FuncKind.POL)),
+            alpha = SubKey("\u00B7", ins("\u00B7"))),
         Key("\u00F7", KeyKind.OP, ins("\u00F7"), shift = SubKey("Rec", KeyAction.OpenFunc(FuncKind.REC))),
     ),
 
@@ -220,6 +220,6 @@ fun keypadRows(): List<List<Key>> = listOf(
             shift = SubKey("RanInt", KeyAction.OpenFunc(FuncKind.RANINT))),
         Key("Ans", KeyKind.MEM, ins("Ans"), labelScale = 0.8f,
             alpha = SubKey("x", ins("x")), shift = SubKey("y", ins("y"))),
-        Key("=", KeyKind.EQUALS, KeyAction.Equals),
+        Key("=", KeyKind.EQUALS, KeyAction.Equals, alpha = SubKey("=", ins("="))),
     ),
 )

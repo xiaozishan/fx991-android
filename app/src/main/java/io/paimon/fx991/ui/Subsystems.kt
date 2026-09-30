@@ -203,6 +203,7 @@ fun CmplxScreen(onBack: () -> Unit) {
         Modifier
             .fillMaxSize()
             .background(c.body)
+            .safeAreaPadding()
             .padding(10.dp)
             .verticalScroll(rememberScrollState())
     ) {
@@ -327,9 +328,8 @@ private val MAT_NAMES = listOf("A", "B", "C", "D")
  * 转置、单位阵、标量乘。整数 / 分数矩阵全程精确。
  */
 @Composable
-fun MatrixScreen(onBack: () -> Unit) {
+fun MatrixScreen(onBack: () -> Unit, store: MatrixStore = MatrixStore()) {
     val c = LocalCalcColors.current
-    val store = remember { MatrixStore() }
     val cells = remember { mutableStateListOf(*Array(16) { "0" }) }
     var cur by remember { mutableStateOf("A") }
     var other by remember { mutableStateOf("B") }
@@ -377,6 +377,7 @@ fun MatrixScreen(onBack: () -> Unit) {
         Modifier
             .fillMaxSize()
             .background(c.body)
+            .safeAreaPadding()
             .padding(10.dp)
             .verticalScroll(rememberScrollState())
     ) {
@@ -480,9 +481,8 @@ private val VEC_NAMES = listOf("A", "B", "C", "D")
  * ③ 向量模式 VECTOR：VctA–VctD（三维）；加减、点积、叉积、模、单位化、夹角。
  */
 @Composable
-fun VectorScreen(onBack: () -> Unit) {
+fun VectorScreen(onBack: () -> Unit, store: VectorStore = VectorStore()) {
     val c = LocalCalcColors.current
-    val store = remember { VectorStore() }
     var cur by remember { mutableStateOf("A") }
     var other by remember { mutableStateOf("B") }
     var ax by remember { mutableStateOf("1") }
@@ -519,6 +519,7 @@ fun VectorScreen(onBack: () -> Unit) {
         Modifier
             .fillMaxSize()
             .background(c.body)
+            .safeAreaPadding()
             .padding(10.dp)
             .verticalScroll(rememberScrollState())
     ) {
@@ -644,6 +645,7 @@ fun StatScreen(onBack: () -> Unit) {
         Modifier
             .fillMaxSize()
             .background(c.body)
+            .safeAreaPadding()
             .padding(10.dp)
             .verticalScroll(rememberScrollState())
     ) {
@@ -801,6 +803,7 @@ fun DistrScreen(onBack: () -> Unit) {
         Modifier
             .fillMaxSize()
             .background(c.body)
+            .safeAreaPadding()
             .padding(10.dp)
             .verticalScroll(rememberScrollState())
     ) {
@@ -856,6 +859,7 @@ fun FuncHelpScreen(vm: CalcViewModel, onBack: () -> Unit) {
         Modifier
             .fillMaxSize()
             .background(c.body)
+            .safeAreaPadding()
             .padding(10.dp)
             .verticalScroll(rememberScrollState())
     ) {

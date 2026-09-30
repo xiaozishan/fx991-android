@@ -1,5 +1,8 @@
 package io.paimon.fx991.ui
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
@@ -7,9 +10,12 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontFamily
+import androidx.core.view.WindowCompat
 
 val Mono = FontFamily.Monospace
 
@@ -161,7 +167,26 @@ fun CalcTheme(
             error = calc.lcdError,
         )
     }
+    // edge-to-edge 下状态栏 / 导航栏图标是深是浅必须自己说了算：
+    // 跟随「应用内」主题（可能是手动覆盖，未必等于系统深色），浅色底用深色图标，反之用浅色图标。
+    val view = LocalView.current
+    SideEffect {
+        val activity = view.context.findActivity() ?: return@SideEffect
+        val controller = WindowCompat.getInsetsController(activity.window, view)
+        controller.isAppearanceLightStatusBars = !darkTheme
+        controller.isAppearanceLightNavigationBars = !darkTheme
+    }
     CompositionLocalProvider(LocalCalcColors provides calc) {
         MaterialTheme(colorScheme = scheme, typography = Typography(), content = content)
     }
+}
+
+/** 从 Compose 的 Context 里把宿主 Activity 找出来（可能是被包装过的 Context）。 */
+private fun Context.findActivity(): Activity? {
+    var c: Context? = this
+    while (c != null) {
+        if (c is Activity) return c
+        c = (c as? ContextWrapper)?.baseContext
+    }
+    return null
 }

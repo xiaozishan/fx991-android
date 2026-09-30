@@ -31,6 +31,9 @@ object FuncHelp {
     const val CAT_ROOT = "根式与幂"
     const val CAT_COMB = "排列组合"
     const val CAT_CONST = "常量与寄存器"
+    const val CAT_UNIFIED = "矩阵 / 向量（主行可用）"
+    const val CAT_STAT = "统计 / 分布（主行可调）"
+    const val CAT_EQUATION = "方程求解（主行）"
 
     @JvmField
     val ALL: List<FuncHelpEntry> = listOf(
@@ -82,8 +85,36 @@ object FuncHelp {
         FuncHelpEntry("PreAns", CAT_CONST, "PreAns", "上上次计算结果", "PreAns", "PreAns"),
         FuncHelpEntry("M", CAT_CONST, "M", "独立存储器（M+ / M− / MRC）", "M", "M"),
         FuncHelpEntry("变量 A–F", CAT_CONST, "A .. F", "STO 存入的变量，可在表达式里直接引用", "A", "A+B"),
-        FuncHelpEntry("∠", CAT_CONST, "r∠θ", "极坐标输入，如 2∠60 → 直角坐标（在复数模式 / 计算界面使用）", "\u2220", "2"),
+        FuncHelpEntry("∠", CAT_CONST, "r∠θ", "极坐标运算符（可多个）：9∠60+5∠6 就是两个复数相加", "\u2220", "2"),
         FuncHelpEntry("Σ", CAT_CONST, "Σ(f(x), x, a, b)", "求和（数值功能对话框）", "\u03A3", "1"),
+
+        // ---- 统一输入面：矩阵 / 向量（主行可直接用，无需切模式）----
+        FuncHelpEntry("MatA", CAT_UNIFIED, "MatA .. MatD", "矩阵变量；在 MATRIX 界面定义数据，主行可直接参与运算", "MatA", "MatA"),
+        FuncHelpEntry("VctA", CAT_UNIFIED, "VctA .. VctD", "向量变量；在 VECTOR 界面定义数据，主行可直接参与运算", "VctA", "VctA"),
+        FuncHelpEntry("det", CAT_UNIFIED, "det(MatA)", "矩阵行列式（方阵）", "det(", "det(MatA)"),
+        FuncHelpEntry("inv", CAT_UNIFIED, "inv(MatA)", "矩阵的逆（不可逆时报错）", "inv(", "inv(MatA)"),
+        FuncHelpEntry("trn", CAT_UNIFIED, "trn(MatA)", "矩阵转置", "trn(", "trn(MatA)"),
+        FuncHelpEntry("×", CAT_UNIFIED, "MatA×MatB", "矩阵乘法（左列数 = 右行数）/ 标量乘", "\u00D7", "MatA\u00D7MatB"),
+        FuncHelpEntry("·", CAT_UNIFIED, "VctA·VctB", "向量点积（也可写 dot(A,B)）", "\u00B7", "VctA\u00B7VctB"),
+        FuncHelpEntry("cross", CAT_UNIFIED, "cross(VctA, VctB)", "向量叉积", "cross(", "cross(VctA,VctB)"),
+        FuncHelpEntry("dot", CAT_UNIFIED, "dot(VctA, VctB)", "向量点积", "dot(", "dot(VctA,VctB)"),
+        FuncHelpEntry("abs", CAT_UNIFIED, "abs(VctA)", "向量取模（标量则取绝对值）", "abs(", "abs(1)"),
+
+        // ---- 统一输入面：统计 / 分布（主行可调）----
+        FuncHelpEntry("mean", CAT_STAT, "mean(数据…)", "均值（数据直接逗号分隔）", "mean(", "mean(1,2,3)"),
+        FuncHelpEntry("sd", CAT_STAT, "sd(数据…)", "总体标准差 σ（分母 n）", "sd(", "sd(1,2,3)"),
+        FuncHelpEntry("ssd", CAT_STAT, "ssd(数据…)", "样本标准差 s（分母 n−1）", "ssd(", "ssd(1,2,3)"),
+        FuncHelpEntry("normpdf", CAT_STAT, "normpdf(x[, μ, σ])", "正态概率密度；缺省为标准正态", "normpdf(", "normpdf(0,1,1)"),
+        FuncHelpEntry("normcdf", CAT_STAT, "normcdf(x[, μ, σ])", "正态累积分布 P(X < x)", "normcdf(", "normcdf(0,1,1)"),
+        FuncHelpEntry("invnorm", CAT_STAT, "invnorm(p[, μ, σ])", "正态分位数（已知概率求 x）", "invnorm(", "invnorm(0.5,0,1)"),
+        FuncHelpEntry("binompdf", CAT_STAT, "binompdf(n, k, p)", "二项分布 P(X = k)", "binompdf(", "binompdf(10,3,0.5)"),
+        FuncHelpEntry("binomcdf", CAT_STAT, "binomcdf(n, k, p)", "二项分布 P(X ≤ k)", "binomcdf(", "binomcdf(10,3,0.5)"),
+        FuncHelpEntry("poissonpdf", CAT_STAT, "poissonpdf(λ, k)", "泊松分布 P(X = k)", "poissonpdf(", "poissonpdf(2,1)"),
+        FuncHelpEntry("poissoncdf", CAT_STAT, "poissoncdf(λ, k)", "泊松分布 P(X ≤ k)", "poissoncdf(", "poissoncdf(2,1)"),
+
+        // ---- 主行求解（REFERENCE 第 7 条）----
+        FuncHelpEntry("方程等号", CAT_EQUATION, "左式 = 右式", "含未知量时按 = 即求解（如 2x+3=7）", "=", "1+1"),
+        FuncHelpEntry("方程组", CAT_EQUATION, "式1, 式2", "用逗号或分号分隔（如 2x+y=5, x-y=1）", ",", "1+1"),
     )
 
     /** 按类别分组（保持定义顺序） */

@@ -12,4 +12,10 @@ enum class Screen(val title: String) {
     STAT("统计与回归"),
     DISTR("概率分布"),
     FUNC_HELP("函数帮助"),
+
+    // ---- 批次 D ----
+    EQUATION("方程"),
+    BASEN("基数换算"),
+    TABLE("函数表"),
+    RATIO("比例"),
 }

@@ -1,5 +1,7 @@
 import io.paimon.fx991.engine.AngleMode;
 import io.paimon.fx991.engine.CalcEngine;
+import io.paimon.fx991.engine.CalcValue;
+import io.paimon.fx991.engine.ComplexNum;
 import io.paimon.fx991.engine.ComplexRect;
 import io.paimon.fx991.engine.Dms;
 import io.paimon.fx991.engine.LimitResult;
@@ -8,6 +10,7 @@ import io.paimon.fx991.engine.PolarForm;
 import io.paimon.fx991.engine.PolarPair;
 import io.paimon.fx991.engine.RootResult;
 import io.paimon.fx991.engine.Sexagesimal;
+import io.paimon.fx991.engine.Unified;
 
 /**
  * 批次 A 数值算法回归：求根 / 定积分 / 数值导数 / 求和 / 极限 /
@@ -53,6 +56,13 @@ public class NumericTest {
         } catch (Throwable e) {
             return "ERR:" + e.getClass().getSimpleName();
         }
+    }
+
+    /** 统一下面口：∠ 现在是真运算符，可多个 */
+    static ComplexNum cx(String expr, AngleMode m) {
+        CalcValue v = Unified.INSTANCE.evaluate(expr, m, 0.0, 0.0, null, 0.0,
+                new java.util.HashMap<String, Double>(), null, null);
+        return Unified.INSTANCE.asComplex(v);
     }
 
     static String errOf(Runnable r) {
@@ -185,19 +195,32 @@ public class NumericTest {
         ComplexRect c1 = PolarForm.INSTANCE.toRect(2.0, 60.0, DEG);
         near("2∠60° → 实部", c1.getRe(), 1.0, 1e-12);
         near("2∠60° → 虚部", c1.getIm(), Math.sqrt(3), 1e-12);
-        ComplexRect c2 = PolarForm.INSTANCE.evaluate("2" + ANGL + "60", DEG, 0.0, 0.0);
-        near("表达式 2∠60 实部", c2.getRe(), 1.0, 1e-12);
-        near("表达式 2∠60 虚部", c2.getIm(), Math.sqrt(3), 1e-12);
-        ComplexRect c3 = PolarForm.INSTANCE.evaluate("1+" + "2" + ANGL + "90", DEG, 0.0, 0.0);
-        near("(1+2)∠90 实部", c3.getRe(), 0.0, 1e-12);
-        near("(1+2)∠90 虚部", c3.getIm(), 3.0, 1e-12);
+        ComplexNum c2 = cx("2" + ANGL + "60", DEG);
+        near("表达式 2∠60 实部", c2.getRe().toDouble(), 1.0, 1e-12);
+        near("表达式 2∠60 虚部", c2.getIm().toDouble(), Math.sqrt(3), 1e-12);
+        ComplexNum c3 = cx("(1+2)" + ANGL + "90", DEG);
+        near("(1+2)∠90 实部", c3.getRe().toDouble(), 0.0, 1e-12);
+        near("(1+2)∠90 虚部", c3.getIm().toDouble(), 3.0, 1e-12);
+        // ∠ 提升为真运算符：可多个、可复合
+        ComplexNum m1 = cx("9" + ANGL + "60+5" + ANGL + "6", DEG);
+        near("9∠60+5∠6 实部", m1.getRe().toDouble(), 9.0 * 0.5 + 5.0 * Math.cos(Math.toRadians(6.0)), 1e-12);
+        near("9∠60+5∠6 虚部", m1.getIm().toDouble(), 9.0 * Math.sqrt(3.0) / 2.0 + 5.0 * Math.sin(Math.toRadians(6.0)), 1e-12);
+        ComplexNum m2 = cx("2" + ANGL + "30" + MUL + "3", DEG);
+        near("2∠30×3 实部", m2.getRe().toDouble(), 3.0 * Math.sqrt(3.0), 1e-12);
+        near("2∠30×3 虚部", m2.getIm().toDouble(), 3.0, 1e-12);
+        ComplexNum m3 = cx("(1+2)" + ANGL + "90" + "\u2212" + "1", DEG);
+        near("(1+2)∠90−1 实部", m3.getRe().toDouble(), -1.0, 1e-12);
+        near("(1+2)∠90−1 虚部", m3.getIm().toDouble(), 3.0, 1e-12);
+        ComplexNum m4 = cx("1" + ANGL + "100", GRAD);
+        near("1∠100(grad) 虚部", m4.getIm().toDouble(), 1.0, 1e-12);
         PolarPair p1 = PolarForm.INSTANCE.toPolar(1.0, Math.sqrt(3), DEG);
         near("直角 → 极坐标 r", p1.getR(), 2.0, 1e-12);
         near("直角 → 极坐标 θ", p1.getTheta(), 60.0, 1e-9);
         PolarPair p2 = PolarForm.INSTANCE.toPolar(-1.0, 0.0, DEG);
         near("(-1,0) → θ=180°", p2.getTheta(), 180.0, 1e-9);
-        eq("缺一侧的 ∠ 报语法错误",
-            errOf(() -> PolarForm.INSTANCE.evaluate("2" + ANGL, DEG, 0.0, 0.0)), "CalcSyntaxError");
+        eq("缺一侧的 ∠ 报语法错误（新语义）",
+            errOf(() -> Unified.INSTANCE.evaluate("2" + ANGL, DEG, 0.0, 0.0, null, 0.0,
+                    new java.util.HashMap<String, Double>(), null, null)), "CalcSyntaxError");
 
         System.out.println("-- GRAD 百分度 --");
         near("sin(100 grad)", CalcEngine.INSTANCE.evaluate("sin(100)", GRAD, 0, 0), 1.0, 1e-12);

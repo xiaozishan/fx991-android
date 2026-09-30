@@ -1,5 +1,6 @@
 # 跑全部回归测试（EngineTest 70 条 + v2 精确分数 25 条 + 自然书写布局 12 条 + 微分方程 18 条
-# + 批次 A 数值算法 91 条 + 批次 B 工具 119 条 + 批次 C 六大子系统）
+# + 批次 A 数值算法 91 条 + 批次 B 工具 119 条 + 批次 C 六大子系统 + Insets 避让布局
+# + 自然书写堆叠显示护栏 16 条 + 批次 D 四新模式）
 # 用法：powershell -File tools\run-tests.ps1
 $ErrorActionPreference = "Stop"
 $env:JAVA_HOME = "D:\applications\jdk-21"
@@ -20,7 +21,11 @@ $suites = @(
     @{ name = "OdeTest";      file = "tools\OdeTest.java";      out = "$env:TEMP\fx991-t4" },
     @{ name = "NumericTest";  file = "tools\NumericTest.java";  out = "$env:TEMP\fx991-t5" },
     @{ name = "ToolsTest";    file = "tools\ToolsTest.java";    out = "$env:TEMP\fx991-t6" },
-    @{ name = "BatchCTest";   file = "tools\BatchCTest.java";   out = "$env:TEMP\fx991-t7" }
+    @{ name = "BatchCTest";   file = "tools\BatchCTest.java";   out = "$env:TEMP\fx991-t7" },
+    @{ name = "InsetsTest";   file = "tools\InsetsTest.java";   out = "$env:TEMP\fx991-t8" },
+    @{ name = "UnifiedTest";  file = "tools\UnifiedTest.java";  out = "$env:TEMP\fx991-t9" },
+    @{ name = "NatLayoutTest"; file = "tools\NatLayoutTest.java"; out = "$env:TEMP\fx991-t10" },
+    @{ name = "BatchDTest";   file = "tools\BatchDTest.java";   out = "$env:TEMP\fx991-t11" }
 )
 
 $failed = 0

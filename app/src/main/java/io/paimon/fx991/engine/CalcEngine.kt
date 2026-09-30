@@ -58,12 +58,12 @@ class CalcMathError(message: String) : Exception(message)
 // 词法
 // ---------------------------------------------------------------------------
 
-private enum class Tok {
+internal enum class Tok {
     NUM, IDENT, PLUS, MINUS, MUL, DIV, POW,
-    FACT, PCT, SQ2, CUBE, RECIP, LP, RP, SQRT, COMMA, END
+    FACT, PCT, SQ2, CUBE, RECIP, LP, RP, SQRT, COMMA, ANGLE, DOT, END
 }
 
-private class Token(val t: Tok, val s: String)
+internal class Token(val t: Tok, val s: String)
 
 private const val CH_MINUS = '\u2212'   // −
 private const val CH_MUL = '\u00D7'     // ×
@@ -74,7 +74,7 @@ private const val CH_SUP_MINUS = '\u207B' // ⁻
 private const val CH_SUP_ONE = '\u00B9'   // ¹
 private const val CH_SQRT = '\u221A'    // √
 
-private class Lexer(private val src: String) {
+internal class Lexer(private val src: String) {
     private var i = 0
 
     fun lex(): List<Token> {
@@ -95,6 +95,8 @@ private class Lexer(private val src: String) {
                 c == '(' -> { out.add(Token(Tok.LP, "(")); i++ }
                 c == ')' -> { out.add(Token(Tok.RP, ")")); i++ }
                 c == ',' -> { out.add(Token(Tok.COMMA, ",")); i++ }
+                c == '\u2220' -> { out.add(Token(Tok.ANGLE, "\u2220")); i++ }
+                c == '\u00B7' -> { out.add(Token(Tok.DOT, "\u00B7")); i++ }
                 c == CH_SQRT -> { out.add(Token(Tok.SQRT, "\u221A")); i++ }
                 c == CH_SQ2 -> { out.add(Token(Tok.SQ2, "\u00B2")); i++ }
                 c == CH_CUBE -> { out.add(Token(Tok.CUBE, "\u00B3")); i++ }
@@ -145,7 +147,7 @@ private class Lexer(private val src: String) {
 // 语法树
 // ---------------------------------------------------------------------------
 
-private sealed class Node {
+internal sealed class Node {
     /** lit 保留字面量原文，供精确轨直接转有理数；π/e 等无常量原文 → null */
     class Num(val v: Double, val lit: String? = null) : Node()
     data object AnsRef : Node()
@@ -173,17 +175,46 @@ private sealed class Node {
 
     /** 双参数函数：logb(底, 真数) / root(次数, 被开方数) / npr(n, r) / ncr(n, r) */
     class Fn2(val name: String, val a: Node, val b: Node) : Node()
+
+    // ---- 统一输入面（REFERENCE 第 6 条）----
+
+    /** 极坐标 `r∠θ`：真运算符，可多个、有优先级；结果为复数 */
+    class Polar(val r: Node, val t: Node) : Node()
+
+    /** 点乘 `A·B`：向量点积（标量时等价乘法） */
+    class Dot(val a: Node, val b: Node) : Node()
+
+    /** 矩阵变量 MatA–MatD */
+    class MatRef(val name: String) : Node()
+
+    /** 向量变量 VctA–VctD */
+    class VecRef(val name: String) : Node()
+
+    /** 可变参数函数：mean / sd / ssd / normcdf / binompdf … */
+    class FnN(val name: String, val args: List<Node>) : Node()
 }
 
-private val FUNC_NAMES = setOf(
+internal val FUNC_NAMES = setOf(
     "sin", "cos", "tan", "asin", "acos", "atan", "log", "ln", "exp", "sqrt",
     "sinh", "cosh", "tanh", "asinh", "acosh", "atanh", "cbrt", "abs"
 )
 
 /** STO 变量名（A–F），大小写不敏感只在单字母且为大写时生效 */
-private val VAR_NAMES = setOf("A", "B", "C", "D", "E", "F")
+internal val VAR_NAMES = setOf("A", "B", "C", "D", "E", "F")
 
-private val FUNC2_NAMES = setOf("logb", "root", "npr", "ncr")
+internal val FUNC2_NAMES = setOf("logb", "root", "npr", "ncr")
+
+/** 矩阵单参函数：det(MatA) / inv(MatA) / trn(MatA) */
+internal val MAT_FUNC_NAMES = setOf("det", "inv", "trn")
+
+/** 统一输入面的可变参数函数（1~4 个参数）：统计 / 分布 / 向量 */
+internal val VARARG_NAMES = setOf(
+    "mean", "sd", "ssd", "sigma",
+    "cross", "dot",
+    "normpdf", "normcdf", "invnorm",
+    "binompdf", "binomcdf",
+    "poissonpdf", "poissoncdf",
+)
 
 // ---------------------------------------------------------------------------
 // 语法制导翻译（递归下降）
@@ -197,7 +228,7 @@ private val FUNC2_NAMES = setOf("logb", "root", "npr", "ncr")
 //   primary -> NUM | CONST | FUNC '(' expr ')' | '√' unary | '(' expr ')'
 // ---------------------------------------------------------------------------
 
-private class Parser(private val ts: List<Token>) {
+internal class Parser(private val ts: List<Token>) {
     private var i = 0
 
     private fun cur(): Token = ts[i]
@@ -244,11 +275,23 @@ private class Parser(private val ts: List<Token>) {
     }
 
     private fun term(): Node {
+        var left = polar()
+        while (true) {
+            when {
+                eat(Tok.MUL) -> left = Node.Mul(left, polar())
+                eat(Tok.DIV) -> left = Node.Div(left, polar())
+                else -> return left
+            }
+        }
+    }
+
+    /** ∠（极坐标）与 ·（点乘）：比 × ÷ 更紧，紧贴两侧操作数 */
+    private fun polar(): Node {
         var left = factor()
         while (true) {
             when {
-                eat(Tok.MUL) -> left = Node.Mul(left, factor())
-                eat(Tok.DIV) -> left = Node.Div(left, factor())
+                eat(Tok.ANGLE) -> left = Node.Polar(left, factor())
+                eat(Tok.DOT) -> left = Node.Dot(left, factor())
                 else -> return left
             }
         }
@@ -331,6 +374,13 @@ private class Parser(private val ts: List<Token>) {
             "y" -> return Node.YRef
             "z" -> return Node.ZRef
         }
+        // 矩阵 / 向量变量：MatA–MatD / VctA–VctD
+        if (text.length == 4 && text.startsWith("Mat") && text[3] in 'A'..'D') {
+            return Node.MatRef(text.substring(3))
+        }
+        if (text.length == 4 && text.startsWith("Vct") && text[3] in 'A'..'D') {
+            return Node.VecRef(text.substring(3))
+        }
         // STO 变量：单字母 A–F
         if (text.length == 1 && text in VAR_NAMES) return Node.VarRef(text)
         val name = when (text) {
@@ -347,6 +397,24 @@ private class Parser(private val ts: List<Token>) {
             if (!eat(Tok.RP)) throw CalcSyntaxError("缺少右括号")
             return Node.Fn2(name, a, b)
         }
+        // 矩阵函数：det(MatA) / inv(MatA) / trn(MatA)
+        if (name in MAT_FUNC_NAMES) {
+            if (!eat(Tok.LP)) throw CalcSyntaxError("语法错误")
+            val a = expr()
+            if (!eat(Tok.RP)) throw CalcSyntaxError("缺少右括号")
+            return Node.FnN(name, listOf(a))
+        }
+        // 可变参数函数：mean(...) / cross(A,B) / normcdf(x,μ,σ) / binompdf(n,k,p) …
+        if (name in VARARG_NAMES) {
+            if (!eat(Tok.LP)) throw CalcSyntaxError("语法错误")
+            val args = ArrayList<Node>()
+            if (ts[i].t != Tok.RP) {
+                args.add(expr())
+                while (eat(Tok.COMMA)) args.add(expr())
+            }
+            if (!eat(Tok.RP)) throw CalcSyntaxError("缺少右括号")
+            return Node.FnN(name, args)
+        }
         if (name !in FUNC_NAMES) throw CalcSyntaxError("语法错误")
         val arg = if (ts[i].t == Tok.LP) paren() else unary()
         return Node.Fn(name, arg)
@@ -357,7 +425,7 @@ private class Parser(private val ts: List<Token>) {
 // 数学函数（浮点轨共用）
 // ---------------------------------------------------------------------------
 
-private object MathOps {
+internal object MathOps {
 
     fun toRad(mode: AngleMode, x: Double): Double = when (mode) {
         AngleMode.DEG -> x * Math.PI / 180.0
@@ -536,6 +604,8 @@ private class Evaluator(
         }
         is Node.Fn -> MathOps.fn(mode, n.name, eval(n.a))
         is Node.Fn2 -> MathOps.fn2(n.name, eval(n.a), eval(n.b))
+        is Node.Polar, is Node.Dot, is Node.MatRef, is Node.VecRef, is Node.FnN ->
+            throw CalcMathError("数学错误")
     }
 }
 
@@ -543,9 +613,9 @@ private class Evaluator(
 // 精确轨求值：能精确就精确，只在无理运算时落回 Double
 // ---------------------------------------------------------------------------
 
-private class ValueEvaluator(
+internal class ValueEvaluator(
     private val mode: AngleMode,
-    private val ans: Value,
+    val ans: Value,
     private val mem: Value,
     private val xv: Double = 0.0,
     private val yv: Double = 0.0,
@@ -555,6 +625,7 @@ private class ValueEvaluator(
 ) {
     private fun v(name: String, fallback: Double): Double = vars[name] ?: fallback
 
+    /** 标量轨求值（统一输入面也复用它，保证纯数值子表达式语义完全一致） */
     fun eval(n: Node): Value = when (n) {
         is Node.Num -> Value.of(n.v, n.lit)
         is Node.AnsRef -> ans
@@ -563,7 +634,7 @@ private class ValueEvaluator(
         is Node.MemRef -> mem
         is Node.XRef -> Value.Floating(v("x", xv))
         is Node.YRef -> Value.Floating(v("y", yv))
-        is Node.ZRef -> Value.Floating(zv)
+        is Node.ZRef -> Value.Floating(v("z", zv))
         is Node.Neg -> neg(eval(n.a))
         is Node.Add -> combine(eval(n.a), eval(n.b), { a, b -> a.plus(b) }, { a, b -> a + b })
         is Node.Sub -> combine(eval(n.a), eval(n.b), { a, b -> a.minus(b) }, { a, b -> a - b })
@@ -591,6 +662,8 @@ private class ValueEvaluator(
         is Node.Sqrt -> sqrtValue(eval(n.a))
         is Node.Fn -> fn1(n.name, eval(n.a))
         is Node.Fn2 -> fn2(n.name, eval(n.a), eval(n.b))
+        is Node.Polar, is Node.Dot, is Node.MatRef, is Node.VecRef, is Node.FnN ->
+            throw CalcMathError("数学错误")
     }
 
     /** 单参数函数：cbrt 能开尽时保持精确；abs 保持精确 */

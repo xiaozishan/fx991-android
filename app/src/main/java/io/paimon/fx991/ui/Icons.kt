@@ -75,25 +75,6 @@ fun KeyGlyph(icon: KeyIcon, tint: Color, size: Dp = 18.dp) {
                 "\u00B1", color = tint, fontSize = (size.value * 1.05f).sp,
                 fontWeight = FontWeight.Bold
             )
-            KeyIcon.THEME -> Canvas(Modifier.size(size)) {
-                val w = this.size.width
-                val h = this.size.height
-                val c = Offset(w / 2, h / 2)
-                val r = h * 0.4f
-                drawCircle(tint, radius = r, center = c, style = Stroke(width = h * 0.1f))
-                val p = Path().apply {
-                    moveTo(c.x, c.y - r)
-                    lineTo(c.x, c.y + r)
-                    close()
-                }
-                drawPath(p, tint)
-                drawArc(
-                    color = tint, startAngle = 90f, sweepAngle = 180f,
-                    useCenter = true,
-                    topLeft = Offset(c.x - r, c.y - r),
-                    size = Size(r * 2, r * 2)
-                )
-            }
             KeyIcon.CAMERA -> Canvas(Modifier.size(size)) {
                 val w = this.size.width
                 val h = this.size.height

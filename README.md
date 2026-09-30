@@ -1,4 +1,4 @@
-# 科学计算器（自然书写 LCD 复刻）· v2 + 批次 A + 批次 B + 批次 C
+# 科学计算器（自然书写 LCD 复刻）· v2 + 批次 A + 批次 B + 批次 C + 系统栏避让 + 统一输入面 + 批次 D
 
 Android 科学计算器。界面与交互参考一台科学计算器手机 App（键位、配色、自然书写 LCD），
 **不含任何品牌厂商的商标、logo、字体或官方图片资源** —— 全部 UI 由 Jetpack Compose 手写绘制，
@@ -10,17 +10,159 @@ Android 科学计算器。界面与交互参考一台科学计算器手机 App�
 app/build/outputs/apk/debug/app-debug.apk
 ```
 
-批次 C 交付件（最后一批）：
+本批（**批次 D：补齐最后 4 个模式**）交付件：
 
 | 项 | 值 |
 |:--|:--|
 | 绝对路径 | `C:\Users\Administrator\.openclaw\workspace\projects\casio-calc-android\app\build\outputs\apk\debug\app-debug.apk` |
-| 大小 | 9,810,588 bytes（≈ 9.36 MB，`clean assembleDebug`） |
-| SHA-256 | `9E93E08D0BB9818D5024F5BB606FE378BE763016111DB8149530B98DD2B123BC` |
-| 包名 / 版本 | `io.paimon.fx991` · versionCode 1 / versionName 1.0.0（应用内版本串 `1.3.0-batchC`） |
+| 大小 | 10,205,383 bytes（≈ 9.73 MB，`assembleDebug`） |
+| SHA-256 | `05FBE6D40B0503AA050841914362584A6D8C2E6644CE2A8E59C717AC16AB0587` |
+| 包名 / 版本 | `io.paimon.fx991` · versionCode 1 / versionName 1.0.0（应用内版本串 `1.4.0-batchD`） |
 
-（批次 B 交付件：9,695,900 bytes，SHA-256 `E9D2AA5C79C39ED87EB66B39048438779826B288A9CF1C90500610425CB97ECC`；
+（自然书写分数堆叠显示修复：10,151,202 bytes，SHA-256 `2C62931A273B17725E0DB2AB23C334157C4338870B8E72D0C2295CC9AAEA0A84`；
+系统栏避让：9,810,612 bytes，SHA-256 `B06B564F718D0E1083534B9696F12557F83E9EB525F2713C688ED3ABE2937B73`；
+批次 C：9,810,588 bytes，SHA-256 `9E93E08D0BB9818D5024F5BB606FE378BE763016111DB8149530B98DD2B123BC`；
+批次 B：9,695,900 bytes，SHA-256 `E9D2AA5C79C39ED87EB66B39048438779826B288A9CF1C90500610425CB97ECC`；
 批次 A：9,663,132 bytes，SHA-256 `8F66F3D05EBF217E42D430A2B48EEDB069A97A8F0FD7D62978386794E13B5789`。）
+
+## 批次 D 做了什么（本次）
+
+目标：补齐 MODE 菜单里最后 4 个「待实现」模式，并清掉剩余占位 / 死代码 —— **模式菜单 12 项全部可用**。
+
+| # | 模式 | 内容 |
+|:--|:--|:--|
+| ① | **方程 EQN** | **多项式方程 2 / 3 / 4 次**：系数输入 → 复用主行 `EquationSolver` 的精确根逻辑（有理根 / 根式 / 复根，如 2x²−3x+1=0 → x = 1/2, 1；x²+1=0 → ±i）；3 / 4 次无有理根时 **Durand-Kerner 数值兜底**给全部根（含复根，如 x³−2x−5=0 → 2.094551482, −1.047275741 ± 1.135939889i）。**联立线性方程组 2~4 元**：高斯消元 + 精确分数（如 2x+4y=10, 6x−2y=4 → x = 9/7, y = 13/7），无解 / 无穷多解明确告知。主行求解只到三元 x/y/z，模式界面独立支持四元 w。点一条解可带回主行继续运算 |
+| ② | **基数换算 BASE-N** | DEC / HEX / BIN / OCT 四进制互转 + 位运算 and / or / xor / xnor / not / neg；字长 16 / 32 / 64 位可选；负数按补码存储与显示（HEX / BIN / OCT 显示位形，DEC 显示有符号值并附无符号幅值，如 -1 在 16 位下 = FFFF / 1111111111111111 / 177777，附无符号 65535）；输入按字长校验，超字长 / 非法数字明确报错 |
+| ③ | **函数表 TABLE** | 输 f(x) 与起值 / 终值 / 步长 → 数值表，8 行一页翻页；可开 g(x) 双函数对照；单点无定义（如 1/x 在 x=0）该格显「错误」不中断整表；行数上限 200；三角函数跟随角度制（界面内可切 DEG / RAD / GRAD） |
+| ④ | **比例 RATIO** | a:b = c:x 与 a:b = x:d 两种形式；输入小数当场转有理数，能精确给精确分数并附小数近似（如 4:2 = 3:x → x = 3/2（≈ 1.5））；分母为 0 明确报错 |
+
+### 占位 / 死代码清理
+
+| 项 | 处置 | 理由 |
+|:--|:--|:--|
+| `KeyAction.ThemeToggle` | **删除** | 没有任何键引用它，分发里是 `-> Unit` 空操作；主题切换走设置面板（三态：跟随系统 / 浅 / 深），原机也没有独立主题键 |
+| `KeyIcon.THEME` | **连图标绘制分支一起删除** | 没有任何键引用 |
+| `CalcScreen.kt` 动作分发处「占位键弹提示」过时注释 | **改写** | 批次 C 起 `KeyAction.Todo` 已连同类型定义删除，不存在弹提示的占位键 |
+| MODE 菜单 4 个 `null` 条目（方程 / 基数换算 / 函数表 / 比例） | **全部换成真入口** | 本批核心任务 |
+| 菜单文案「待实现 / 灰显条目为后续批次」 | **移除** | 没有未实现模式了 |
+
+### 实现方式
+
+- 新增 4 个**纯 Kotlin** 引擎文件（无 Compose 依赖 → 可 JVM 直跑回归）：`EqnMode.kt`（系数 → 表达式串 → 复用 `EquationSolver` 精确根；精确化失败走 Durand-Kerner；2~4 元精确高斯消元）、`BaseN.kt`、`TableGen.kt`、`RatioOps.kt`。
+- 新增 `ui/ModeScreens.kt` 承载 4 个界面，复用批次 C 的 `SubHeader / NumField / SubButton / ResultBox` 组件；根节点统一 `Modifier.safeAreaPadding()`，深浅主题走同一套颜色令牌。
+- `Screen` 枚举 +4；`CalcApp` when 分发 +4；`modeEntries()` 4 个 null → 真入口；应用内版本串 `1.4.0-batchD`。
+- 新增 `tools/BatchDTest.java`（**87 条**），全量回归 **691/691** 全过（604 + 87）。
+
+## 自然书写分数堆叠显示修复（上一批）
+
+> 旅行者真机反馈：输入两个分数时，本该并排，实际**竖着叠、贴右边缘、分数线延伸出屏外、左侧大片空白**。
+
+### 根因
+
+原实现把**内在尺寸测量**（`IntrinsicSize.Max`）与**横向滚动**（宽度约束被放开为无限）混用，
+同时 `Nat.Frac` 内又用 `fillMaxWidth()` 去撑分数线——三者互锁：
+内在尺寸在无限宽约束下无法收敛，分数被迫纵向堆叠；`fillMaxWidth` 又拿到「无限宽」，
+分数线长度失控；再叠加无限宽约束下的末端排列（`Arrangement.End`），内容被推到右侧截断。
+
+### 改法（`app/src/main/java/io/paimon/fx991/ui/NaturalDisplay.kt`）
+
+1. **删掉 `IntrinsicSize`**：分数改用自定义 `Layout` 测量——分子/分母各自自然包裹，宽度取二者较大者。
+2. **分数线 / 根号上横线改由 `Modifier.drawBehind` 手绘**：在 draw 阶段按**实测出来的 `size.width`** 画线，不再让子 `Box` 去撑宽。
+3. **滚动容器里不再出现内在尺寸测量、也不再出现撑满父宽修饰**：LCD 行靠 `Box(contentAlignment = Alignment.BottomEnd)` 在普通约束下贴右；
+   滚动状态初始 `Int.MAX_VALUE`，短表达式贴右、超长表达式默认显示结尾并可向左滚。
+4. 样式（字号/颜色/粗体/1.5dp 线宽/3dp 侧距）保持原值不动。
+
+### 逐条对应四现象，为何现在会修好
+
+| 真机现象 | 对应修法 | 为何修好 |
+|:--|:--|:--|
+| 两个分数被压成竖排 | 删 `IntrinsicSize`，分数用自定义 measure 自然包裹 | 不再有「内在尺寸在无限宽约束下无法收敛」的测量塌陷；`Nat.Row` 拿到的每个 `Nat.Frac` 都是**已定自然宽度**的节点，横排就是横排 |
+| 紧贴右边缘 / 被截断 | 右对齐改为 `Box(BottomEnd)` + 滚动初值置末 | 不再依赖无限宽约束下的 `Arrangement.End`；内容窄时贴右、超宽时从右端开始并可滚动，不会被推到屏外截断 |
+| 分数线算不出宽度 / 延伸出屏 | 分数线改 `drawBehind` 按 `size.width` 画 | 分数线宽度 = 分数节点**实测宽度**（= 分子分母较大者），不再被 `fillMaxWidth` 拉到无限宽 |
+| 左侧/中部大片空白 | 宽度由内容决定、右对齐由 Box 承担 | 节点宽度贴合内容，空白不再来自「测量塌陷后内容跑偏」 |
+
+### 回归
+
+- 新增 `tools/NatLayoutTest.java`（16 条）：**源码护栏**——`NaturalDisplay.kt` 不含内在尺寸测量、不含撑满父宽修饰、改用 `drawBehind`、右对齐用 `Box` 的 End 对齐；**结构回归**——单分数 / 多分数并排 / 分数套分数 / 根号套分数 / 分数套根号 / 上标并排 / 超长表达式 的 ASCII 投影。
+- 全量回归 **604/604 全过**（原 588 条 + 新增 16 条；`powershell -File tools\run-tests.ps1`）。
+- `assembleDebug` 绿。
+
+> 注：布局由 Compose 渲染，JVM 无法端到端验证；上述为**代码层面把「不依赖内在尺寸」做死** + 结构投影回归，
+> 未声称「已真机验证」。
+
+## 统一输入面 + 主行求解（`REFERENCE.md` 第 6、7 条）
+
+> 旅行者原话：「都做到一起不行吗，我不想手动切换模式输入」「把公式敲进去，按 `=` 就出解」。
+> 核心：把六个子系统从「门」降级成「工具」——不再前置切模式，主计算行一个入口什么都能算。
+
+### ① `∠` 从「整串特例」提升为**表达式里的真运算符**（`NumericOps.PolarForm.evaluate` 旧分支已删）
+
+- 文法新增一层：`term -> polar(('*'|'/') polar)*`、`polar -> factor(('∠'|'·') factor)*` —— `∠` 比 `+ -` 紧、比 `× ÷` 紧，紧贴两侧操作数。
+- **可多个**：`9∠60+5∠6` → 两个复数相加 `9.472609 + 8.316871i`；`2∠30×3`、`(1+2)∠90−1` 同理。
+- 角度制跟随 DEG / RAD / GRAD；结果落进原有**复数轨**，`S⇔D` 仍在 直角坐标 ⇄ `r∠θ` 之间切。
+- 语义变化提醒：以前 `∠` 是「整串最后一个隐式边界」，所以 `1+2∠90` 会被当成 `(1+2)∠90`；现在按真运算符优先级得到 `1+(2∠90)`。
+
+### ② 主行统一输入面（矩阵 / 向量 / 统计 / 分布不再需要切模式）
+
+| 类别 | 主行可直接写 |
+|:--|:--|
+| 矩阵 | `MatA×MatB`、`MatA+MatB`、`2×MatA`、`det(MatA)`、`inv(MatA)`、`trn(MatA)` |
+| 向量 | `VctA·VctB`（点乘运算符 `·`）、`dot(A,B)`、`cross(A,B)`、`VctA+VctB`、`abs(VctA)`（取模） |
+| 统计 | `mean(1,2,3)`、`sd(…)`（总体 σ）、`ssd(…)`（样本 s）、`sigma(…)` |
+| 分布 | `normpdf` / `normcdf` / `invnorm`、`binompdf` / `binomcdf`、`poissonpdf` / `poissoncdf` |
+
+- 实现：新增 `engine/UnifiedEval.kt`（`CalcValue = Scalar(复数) | MatVal | VecVal`）。**纯标量子树一律交回原来的双轨内核 `ValueEvaluator`**，只有出现新语法时才走联合求值 —— 所以原有标量语义（精确分数、`%`、`√`、排列组合…）一分不差。
+- `MatA–MatD` / `VctA–VctD` 的存储从「界面内 `remember`」上提到 `CalcViewModel`，因此 **MATRIX / VECTOR 界面里定义的数据，主行直接就能引用**。
+- 模式菜单**保留**（编辑数据表 / 定义变量 / 看图），但不再是计算的前置条件。
+- 便捷插入：FUNC HELP 新增 **矩阵 / 向量**、**统计 / 分布**、**方程求解** 三组条目，点一条直接写进主行；`×` 的 ALPHA 层给 `·`，`=` 的 ALPHA 层给 `=`。
+
+### ③ 主行直接求解（判定：含未知量且带 `=` → 当方程；否则普通求值）
+
+- 新增 `engine/EquationSolver.kt`（手写，零依赖）：
+  - **一元多项式**：AST → 多变量多项式（精确有理数系数）→ 一次/二次闭式；判别式能开尽给**精确分数**，开不尽给**精确根式**（`x²-2=0` → `±√2`），负判别式给**复根**（`x²+1=0` → `±i`，`x²+2x+2=0` → `-1 ± i`）；三次及以上先用**有理根定理**降阶。
+  - **一元超越方程**：在 `[−周期, 3×周期]`（按角度制）上多初值扫描 + 二分细化，**自动列出多个根**并去重（`sin(x)=0.5`（DEG）→ `30°, 150°, 390°, …`）。
+  - **方程组**：`,` 或 `;` 分隔；线性方程组走**高斯消元 + 精确分数**（`2x+y=5, x-y=1` → `x = 2, y = 1`）；非线性走多起点数值牛顿。
+  - **无解 / 无穷多解**明确告知：`x+1=x+2` → 无解；`2x=2x` → 无穷多解；`x+y=3`（欠定）→ 无穷多解；`x+y=1, x+y=2`（不相容）→ 无解。
+- 结果直接回主行（进历史、可继续参与运算）：多解在 LCD 结果显示区**逐条列出**，点一条即插入主行。
+
+### 验收自测（主行一行、不切模式、不给初值）
+
+| 例子 | 结果 |
+|:--|:--|
+| `9∠60+5∠6` | ✅ `9.472609477 + 8.316871i`（复数相加） |
+| `2∠30×3` | ✅ `5.196152423 + 3i` |
+| `det(MatA)` | ✅ `-2`（MatA=[[1,2],[3,4]]） |
+| `MatA×MatB` | ✅ `[[4,4],[10,8]]` |
+| `VctA·VctB` | ✅ `12` |
+| `cross(VctA,VctB)` | ✅ `(27, 6, -13)` |
+| `normcdf(0,1,1)` | ✅ `0.1586552638`（手写 erf 精度 ~1e-7） |
+| `nCr(100,50)` | ✅ `100891344545564193334812497256`（精确大数） |
+| `2x+3=7` | ✅ `x = 2` |
+| `x²-3x+2=0` | ✅ `x = 1, 2`（已排序） |
+| `x²+1=0` | ✅ `x = ±i` |
+| `sin(x)=0.5`（DEG） | ✅ `x = -330°, -210°, 30°, 150°, 390°, 510°, 750°, 870°`（多根） |
+| `2x+y=5, x-y=1` | ✅ `x = 2, y = 1` |
+
+## 系统栏避让（上一批 · 真机反馈修复）
+
+> 旅行者真机实测反馈：「要做一个避让状态栏，不然上面的点不了」——顶栏那排键（菜单 / PRO / Σ / 设置 / 拍照 / 更多）
+> 被系统状态栏遮住，点不到。
+
+**根因**：`targetSdk = 36` 在 Android 15+ 强制 edge-to-edge，窗口铺满整屏，而旧代码只在主计算界面用了
+`systemBarsPadding()`，且没在 Activity 里正式声明 edge-to-edge —— 其余界面 / 弹层完全没有避让。
+
+**方案：官方 Compose Insets（读系统真实上报值，不写死高度）**
+
+| 层 | 怎么做 |
+|:--|:--|
+| Activity | `MainActivity` 调 `enableEdgeToEdge()`，窗口铺满整屏，由内容自己避让 |
+| 统一修饰符 | `ui/Insets.kt` 的 `Modifier.safeAreaPadding()` = `windowInsetsPadding(WindowInsets.safeDrawing)`：**顶避状态栏、底避导航栏/手势条、左右避横屏挖孔与系统手势区、键盘弹出时避 IME**，全部由系统上报，刘海 / 挖孔 / 手势条高度都自适应 |
+| 覆盖范围 | 主干 8 个界面（主计算 / 微分方程 / 复数 / 矩阵 / 向量 / 统计 / 分布 / 函数帮助）根节点各挂一次；**所有弹层 / 对话框**走 `PanelCard` 统一外壳，在遮罩内层再加一次 —— 一律不漏 |
+| 系统栏图标 | `Theme.kt` 里 `SideEffect` 把状态栏 / 导航栏图标明暗跟随**应用内**主题（手动覆盖也正确），不跟系统深浅色脱节 |
+| 挖孔 | `themes.xml`（含 `values-night`）加 `windowLayoutInDisplayCutoutMode = shortEdges`，内容可延伸进刘海区，再由 insets 避让 |
+| 小屏 / 横屏 | `ui/SafeArea.kt`（纯 Kotlin）按扣掉安全区后的**真实可用高度**选布局：够高→权重布局（LCD 30% / 键盘 70%）；横屏 / 小屏不够高→紧凑布局（LCD 与按键行用最小高度，整体可滚动），不把键盘压扁、不溢出屏幕 |
+
+不改 `REFERENCE.md`；零新增依赖 / 图片 / 字体；只动工程内文件。
 
 ## 批次 B 做了什么（本轮）
 
@@ -176,7 +318,7 @@ cd C:\Users\Administrator\.openclaw\workspace\projects\casio-calc-android
 
 ```
 app/src/main/java/io/paimon/fx991/
-  MainActivity.kt             入口
+  MainActivity.kt             入口（enableEdgeToEdge：窗口铺满整屏，内容自行避让系统栏）
   Screen.kt                   主界面枚举（计算 / 微分方程）
   Settings.kt                 设置 / 精度 / 主题 / 覆盖层 / FuncKind / FuncDialog（批次 A 新增；批次 B 增：NumberNotation、POL/REC/RANINT、STO/CONST/CONV/SI/CLRCONFIRM 覆盖层）
   CalcViewModel.kt            状态机：表达式 / 结果 / Ans·PreAns / M / 变量寄存器 / 历史 / DEG-RAD-GRAD / SHIFT-ALPHA 层 /
@@ -188,7 +330,8 @@ app/src/main/java/io/paimon/fx991/
     Rational.kt               Rational(BigInteger) 精确有理数 + Value 双轨；批次 A 增：n 次方根、连分数逼近
     OdeSolver.kt              RK4 一阶/二阶 + 常系数线性解析解
     NumericOps.kt             批次 A 新增：数值求根 / 自适应 Simpson / 数值导数 / 求和 / 极限 /
-                              排列组合 / 度分秒 / 极坐标（含 ComplexRect、Dms、LimitResult、RootResult）
+                              排列组合 / 度分秒 / 极坐标（含 Dms、LimitResult、RootResult；
+                              旧「整串特例解析、最多一个 ∠」的 PolarForm.evaluate 本批已删）
     Tools.kt                  批次 B 新增：科学常数表 / 单位换算（含温度仿射）/ SI 前缀 / 随机数 / 变量寄存器（纯 Kotlin）
     ComplexOps.kt             批次 C 新增：复数（双轨）+ ExactMath 公共算术
     MatrixOps.kt              批次 C 新增：矩阵 MatA–D（≤4×4）加减乘 / 行列式 / 逆 / 转置 / 单位阵 / 标量乘
@@ -196,6 +339,15 @@ app/src/main/java/io/paimon/fx991/
     StatOps.kt                批次 C 新增：单变量统计 + 双变量线性回归
     DistrOps.kt               批次 C 新增：正态（P/Q/R）/ 二项 / 泊松（erf 与 lnΓ 手写）
     FuncHelp.kt               批次 C 新增：函数帮助目录 + 语法键
+    UnifiedEval.kt            统一输入面新增：CalcValue（标量/复数/矩阵/向量）+ 联合求值；
+                              纯标量子树回退 ValueEvaluator（双轨内核一字不改）
+    EquationSolver.kt         主行求解新增：多项式精确根（含复根/根式）、超越方程多根扫描、
+                              线性方程组高斯消元（精确分数）、非线性数值牛顿、无解/无穷多解告知
+    EqnMode.kt                批次 D 新增：方程模式——系数式多项式（复用 EquationSolver 精确根，
+                              Durand-Kerner 数值兜底含复根）+ 2~4 元联立线性（精确高斯消元）
+    BaseN.kt                  批次 D 新增：DEC/HEX/BIN/OCT 互转 + 位运算 + 字长 16/32/64 + 补码
+    TableGen.kt               批次 D 新增：函数表生成（f(x) / 可选 g(x)，起终值 / 步长 / 行数上限）
+    RatioOps.kt               批次 D 新增：比例 a:b=c:x 与 a:b=x:d（精确有理数）
   ui/
     Theme.kt                  DayNight 双套配色 + 计算器专用颜色令牌（橙 SHIFT / 紫 ALPHA）
     Keys.kt                   键位表（照参考图：顶栏 8 项 + 键盘 9 行）+ MODE 菜单条目
@@ -203,9 +355,13 @@ app/src/main/java/io/paimon/fx991/
     CalcScreen.kt             LCD + 键盘 + 全部覆盖层（MODE / 设置 / 更多 / 关于 / 拍照说明 / 历史 /
                               帮助 / 数值功能对话框），按键全走 Material 3 Button
     NaturalDisplay.kt         自然书写渲染（分数堆叠 / √ 上横线 / 上标）
-    NatModel.kt               自然书写布局树解析 + ASCII 投影（纯 Kotlin，可 JVM 回归）；批次 A 增：逗号 / ∠
+    NatModel.kt               自然书写布局树解析 + ASCII 投影（纯 Kotlin，可 JVM 回归）；批次 A 增：逗号 / ∠；
+                              本批增：= / ; / ·
     OdeScreen.kt              微分方程界面（输入 / 数值表 / Canvas 曲线图）
     Subsystems.kt             批次 C 新增：复数 / 矩阵 / 向量 / 统计 / 分布 / 函数帮助 六个独立界面
+    ModeScreens.kt            批次 D 新增：方程 / 基数换算 / 函数表 / 比例 四个独立界面
+    Insets.kt                 系统栏避让新增：Modifier.safeAreaPadding()（WindowInsets.safeDrawing，全界面共用）
+    SafeArea.kt               系统栏避让新增：可用高度 / 紧凑滚动布局策略（纯 Kotlin，可 JVM 回归）
 app/src/main/res/
   values, values-night        DayNight 主题与颜色
   drawable, drawable-night    自适应图标背景（浅/深两套）
@@ -219,7 +375,13 @@ tools/
   NumericTest.java            批次 A 数值算法回归（91 条）
   ToolsTest.java              批次 B 工具回归（119 条：常数/单位换算/温度/SI/随机数/Pol·Rec/abs/PreAns/变量/ENG·SCI/Exp）
   BatchCTest.java             批次 C 六大子系统回归（159 条：复数/矩阵/向量/统计/分布/函数帮助）
-  run-tests.ps1               一次跑完六套
+  InsetsTest.java             系统栏避让回归（18 条：最小高度 / 滚动阈值 / 机型区间 / 行高兜底）
+  UnifiedTest.java          统一输入面 + 主行求解回归（69 条：多∠与角度制 / 矩阵向量统计分布主行调用 /
+                            一元方程含复根根式 / 超越方程多根 / 方程组 / 无解·无穷多解）
+  NatLayoutTest.java          自然书写堆叠显示护栏（16 条：源码护栏 + 结构投影）
+  BatchDTest.java             批次 D 回归（87 条：多项式精确根 / Durand-Kerner 数值兜底 / 2~4 元联立 /
+                            BASE-N 解析显示补码位运算 / 函数表生成与校验 / 比例精确解）
+  run-tests.ps1             一次跑完十一套
 ```
 
 ## 表达式引擎
@@ -281,7 +443,8 @@ Value = Exact(Rational) | Floating(Double)
 - **批次 B**：科学常数表（24 条）、单位换算（长度/质量/时间/面积/体积/温度）、SI 前缀换算、0–1 随机数、整数区间随机、Pol/Rec、绝对值 `abs`、变量 A–F/x/y 存储与引用、PreAns、工程/科学记数显示、历史单条删除、CLR ALL 确认全清
 - **批次 C**：复数模式（a+bi 四则 / 模 / 辐角 / 共轭 / 直角⇄极坐标）、矩阵模式（MatA–D ≤4×4，加减乘 / det / 逆 / 转置 / 单位阵 / 标量乘）、向量模式（VctA–D，点积 / 叉积 / 模 / 单位化 / 夹角）、统计模式（单变量描述统计 + 双变量回归）、分布模式（正态 P/Q/R、二项、泊松）、函数帮助（37 条目录 + 语法键插入）
 - **SHIFT / ALPHA 双功能层**（键帽上橙色 / 紫色小字，按下后下一次按键走第二功能）；**`2nd` 与 SHIFT 同义**
-- **MODE 菜单** → 计算 / 微分方程 / 复数 / 矩阵 / 向量 / 统计与回归 / 概率分布 / 函数帮助（其余模式置灰标「待实现」）
+- **MODE 菜单** → 计算 / 微分方程 / 方程 / 矩阵 / 向量 / 统计与回归 / 复数 / 基数换算 / 函数表 / 概率分布 / 函数帮助 / 比例（**12 项全部可用**）
+- **批次 D**：方程模式（多项式 2/3/4 次含复根 + 联立线性 2~4 元精确分数 + 无解/无穷多解告知）、基数换算（四进制互转 + 位运算 + 字长 + 补码）、函数表（f/g 双函数对照 + 翻页）、比例（a:b=c:x / a:b=x:d 精确解）
 - **顶栏 6 项真 UI**：菜单 / 设置 / 更多 / PRO(关于) / Σ / 拍照解题说明页
 - **设置**：主题（跟随系统/浅/深）、角度制、显示精度（有效数字 / 小数位）、分数显示、按键震动
 - **数值功能**：SOLVE、∫dx、d/dx、Σ、Limit、CALC、hyp、度分秒、极坐标、nPr/nCr
@@ -289,18 +452,25 @@ Value = Exact(Rational) | Floating(Double)
 - **DayNight 深浅色联动**（含设置里手动覆盖）、自适应图标 + 主题图标单色层
 - 错误提示：`语法错误` / `数学错误`；数值功能另有「求根失败 / 积分端点无定义 / 参数不是合法数字」等；微分方程另有「步长不合法 / 步数过多 / 数值发散」
 
-## 未实现 / 占位键（批次 C 之后：**0**）
+## 未实现 / 占位键（批次 D 之后：**0**，模式菜单也清零）
 
 `KeyAction.Todo` 已从源码中**彻底删除**（连类型定义一起），全部按键都有真行为，界面上不再出现「未实现」提示。
+批次 D 再把 MODE 菜单里最后 4 个「待实现」条目（方程 / 基数换算 / 函数表 / 比例）全部实现，并顺手清掉两处
+死代码：从未被任何键引用、分发里空操作的 `KeyAction.ThemeToggle` 与从未被引用的 `KeyIcon.THEME`（连同绘制分支）。
+**至此：占位键 0、占位模式 0、死代码动作 0。**
 
 > 批次 A 结束时剩 20 个；批次 B 换掉 14 个（STO / ENG / CLR ALL / PreAns / History / Exp / \|x\| / CONST / CONV / SI /
 > Ran# / RanInt / Pol / Rec），余 6 个；批次 C 把最后 6 个（CMPLX / MATRIX / VECTOR / STAT / DISTR / FUNC HELP）
-> 全部实现，**占位归零**。
+> 全部实现；批次 D 补齐模式菜单 4 项（EQN / BASE-N / TABLE / RATIO），**占位归零**。
 
 已知取舍：
 
 - 双参数函数用逗号分隔、且必须带括号：`logb(2,8)`、`root(3,27)`、`npr(5,2)`、`ncr(5,2)`
-- `∠` 表达式只支持**一个** `∠`，两侧各是一个普通表达式（`2∠60`、`(1+2)∠90`）；不做完整复数运算
+- `∠` 已是**真运算符**（可多个、优先级高于 `+ -`、紧贴两侧操作数）；因为优先级变了，`1+2∠90` 现在按 `1+(2∠90)` 解析，要 `(1+2)∠90` 得自己加括号
+- 一元方程的非多项式（超越）求解是**数值扫描**：默认区间 `[−周期, 3×周期]`（按角度制），最多列出 12 个根；方程模式里 3 / 4 次多项式无有理根时走 **Durand-Kerner 数值兜底**（复根成对给出）
+- 主行方程组只支持线性（精确高斯消元）与最多 3 个未知量的非线性数值牛顿；`=` 右侧留空报语法错误；**方程模式**的联立线性支持到 4 元（x / y / z / w），非线性组仍只在主行、最多 3 元
+- 基数换算的输入按字长校验：幅值 ≥ 2^bits 报错；DEC 正数超过有符号范围时按补码环绕显示（如 32 位下 4294967295 → -1）
+- 函数表行数上限 200（翻页展示）；某个点无定义只影响该格
 - SOLVE 的精确根只在分母 ≤1000 且严格过零点时给出（`x²-2` 不会硬凑成分数）
 - `(-)` 记法 `2(-)3` 不报语法错误（当作二元减号，得 -1）
 - 表达式超宽时横向滚动（不再缩字号）
@@ -318,26 +488,30 @@ Value = Exact(Rational) | Floating(Double)
 powershell -File tools\run-tests.ps1
 ```
 
-批次 C 结束时的结果（全部通过，共 **494** 条）：
+本次（批次 D：四个新模式 + 占位清零）的结果（全部通过，共 **691** 条）：
 
 ```
 EngineTest    pass=70  fail=0     # v1 资产，不许退步
 EngineTestV2  pass=25  fail=0     # 精确分数双轨
-DisplayTest   pass=12  fail=0     # 自然书写布局投影（原 9 条 + 批次 A 新增 3 条）
+DisplayTest   pass=12  fail=0     # 自然书写布局投影
 OdeTest       pass=18  fail=0     # RK4 + 解析解
-NumericTest   pass=91  fail=0     # 批次 A：求根/积分/导数/求和/极限/双曲/排列组合/度分秒/极坐标/GRAD/精度
+NumericTest   pass=98  fail=0     # 批次 A：求根/积分/导数/求和/极限/双曲/排列组合/度分秒/极坐标/GRAD/精度/多∠
 ToolsTest     pass=119 fail=0     # 批次 B：常数/单位换算（含温度）/SI 前缀/随机数/Pol·Rec/abs/PreAns/变量/ENG·SCI/Exp
-BatchCTest    pass=159 fail=0     # 批次 C：复数四则/模辐角/共轭/直角⇄极坐标、矩阵 det/逆/乘/转置/单位阵、
-                                  #          向量点积/叉积/模/单位化/夹角、统计单双变量、三种分布、帮助页语法键完整性
+BatchCTest    pass=159 fail=0     # 批次 C：复数/矩阵/向量/统计/分布/函数帮助
+InsetsTest    pass=18  fail=0     # 系统栏避让：所需最小高度 / 滚动切换阈值 / 横竖屏与分屏区间 / 行高兜底
+UnifiedTest   pass=69  fail=0     # 统一输入面 + 主行求解
+NatLayoutTest pass=16  fail=0     # 自然书写堆叠显示护栏（源码护栏 + 结构投影）
+BatchDTest    pass=87  fail=0     # 批次 D：多项式精确根/Durand-Kerner 数值兜底/2~4 元联立精确分数/
+                                  #          BASE-N 解析·四进制显示·补码·位运算·字长/函数表生成与校验/比例精确解
 ```
 
-> 335（批次 B 结束时）+ 159（批次 C 新增）= **494** 条，原有 335 条无一条退步。
+> 604（上一批结束）+ 87（批次 D）= **691** 条，原有各套无一条退步。
 
 单跑某套见 `tools/run-tests.ps1` 内的 javac/java 命令行（classpath 用
 `app\build\tmp\kotlin-classes\debug` + kotlin-stdlib 2.0.21）。
 
-> 未接设备 / 模拟器，本轮验证为「编译绿（`clean assembleDebug`）+ **494 条 JVM 回归全通过** + 产物审计（dex 里已确认
-> ComplexNum / MatrixStore / VectorStore / StatOps / DistrOps / FuncHelp / ExactMath 与六个界面类、以及
-> 「复数 CMPLX / 矩阵 MATRIX / 向量 VECTOR / 统计与回归 STAT / 概率分布 DISTR / 函数帮助 FUNC HELP」全部 UI 文案均在包内；
-> 源码无商标字样；`KeyAction.Todo` 用法为 0；未新增任何图片 / 图标 / 字体资源 —— res 清单仍只有 colors / strings / themes / 自适应图标）」，
-> 未做真机 UI 走查。
+> 未接设备 / 模拟器，本轮验证为「编译绿（`assembleDebug`）+ **691 条 JVM 回归全通过** + 产物审计（dex 里已确认
+> EqnMode / BaseN / TableGen / RatioOps 四个新引擎类与「方程 EQN / 基数换算 / 函数表 / 比例 RATIO / 联立方程 /
+> Durand-Kerner / 字长 / 双函数对照 / 1.4.0-batchD」等新文案均在包内，且「待实现」字样在 dex 中为 0；源码无商标
+> 字样（搜不到 CASIO / 卡西欧）；`KeyAction.Todo` / `ThemeToggle` / `KeyIcon.THEME` 均为 0；未新增任何图片 / 图标 /
+> 字体资源 —— res 清单仍只有 colors / strings / themes / 自适应图标）」，未做真机 UI 走查。

@@ -9,7 +9,10 @@ import io.paimon.fx991.engine.AngleMode
 import io.paimon.fx991.engine.CalcEngine
 import io.paimon.fx991.engine.CalcMathError
 import io.paimon.fx991.engine.CalcSyntaxError
+import io.paimon.fx991.engine.CalcValue
 import io.paimon.fx991.engine.ComplexRect
+import io.paimon.fx991.engine.EquationSolver
+import io.paimon.fx991.engine.MatrixStore
 import io.paimon.fx991.engine.NumberNotation
 import io.paimon.fx991.engine.NumericError
 import io.paimon.fx991.engine.NumericOps
@@ -17,7 +20,11 @@ import io.paimon.fx991.engine.PolarForm
 import io.paimon.fx991.engine.RandomOps
 import io.paimon.fx991.engine.Registers
 import io.paimon.fx991.engine.Sexagesimal
+import io.paimon.fx991.engine.SolveItem
+import io.paimon.fx991.engine.SolveKind
+import io.paimon.fx991.engine.Unified
 import io.paimon.fx991.engine.Value
+import io.paimon.fx991.engine.VectorStore
 import io.paimon.fx991.ui.KeyAction
 import kotlin.math.abs
 import kotlin.math.floor
@@ -109,9 +116,21 @@ class CalcViewModel : ViewModel() {
     var funcDialog by mutableStateOf<FuncDialog?>(null)
         private set
 
-    /** 最近一次 a∠θ 的直角坐标结果；S⇔D 在 直角 ⇄ 极坐标 之间切 */
+    /** 最近一次 a∠θ / 复数结果的直角坐标；S⇔D 在 直角 ⇄ 极坐标 之间切 */
     private var lastComplex: ComplexRect? = null
     private var polarFormShown = false
+
+    /** 矩阵 / 向量变量（统一输入面：主行可直接引用 MatA / VctA） */
+    val matrixStore = MatrixStore()
+    val vectorStore = VectorStore()
+
+    /** 方程求解的多解列表（可逐条插入主行） */
+    var solutionItems by mutableStateOf<List<SolveItem>>(emptyList())
+        private set
+
+    /** 求解附注（无解原因 / 扫描区间 …） */
+    var resultNote by mutableStateOf("")
+        private set
 
     fun openOverlay(o: Overlay) {
         overlay = o
@@ -271,7 +290,6 @@ class CalcViewModel : ViewModel() {
             KeyAction.FracFormat -> cycleDisplay()
             KeyAction.Fraction -> insert("\u00F7")
             KeyAction.SignToggle -> insert("\u2212")
-            KeyAction.ThemeToggle -> Unit
             KeyAction.Mode, KeyAction.Menu -> openOverlay(Overlay.MODE)
             KeyAction.Settings -> openOverlay(Overlay.SETTINGS)
             KeyAction.More -> openOverlay(Overlay.MORE)
@@ -310,6 +328,8 @@ class CalcViewModel : ViewModel() {
             expression += text
         }
         histCursor = -1
+        solutionItems = emptyList()
+        resultNote = ""
         refreshPreview()
     }
 
@@ -323,6 +343,8 @@ class CalcViewModel : ViewModel() {
         lastExact = null
         lastComplex = null
         polarFormShown = false
+        solutionItems = emptyList()
+        resultNote = ""
         cancelLayers()
     }
 
@@ -435,50 +457,122 @@ class CalcViewModel : ViewModel() {
         val src = CalcEngine.autoClose(expression)
         if (src.isBlank()) return
         expression = src
+        solutionItems = emptyList()
+        resultNote = ""
         try {
-            if (src.contains(ANGLE_SIGN)) {
-                val c = PolarForm.evaluate(src, angleMode, ans, memValue())
-                lastComplex = c
-                lastExact = null
-                polarFormShown = false
-                resultText = rectText(c)
-                previewText = ""
-                isError = false
-                pushHistory(src, resultText)
-                justEvaluated = true
+            // REFERENCE 第 7 条：含未知变量且带 `=` → 当方程求根；不含未知变量 → 普通求值
+            if (EquationSolver.looksLikeEquation(src)) {
+                if (EquationSolver.unknowns(src).isNotEmpty()) {
+                    runEquation(src)
+                    return
+                }
+                val lhs = src.substringBefore('=').trim()
+                if (lhs.isEmpty()) {
+                    syntaxError()
+                    return
+                }
+                presentValue(src, Unified.evaluate(
+                    lhs, angleMode, ans, memValue(), lastExact, preAns, varsMap(), matrixStore, vectorStore,
+                ))
                 return
             }
-            val v = CalcEngine.evaluateValue(
-                src, angleMode, ans, memValue(), preAns = preAns, vars = varsMap(),
+            // REFERENCE 第 6 条：主行统一输入面（标量 / 复数 / 矩阵 / 向量 / 统计 / 分布）
+            val v = Unified.evaluate(
+                src, angleMode, ans, memValue(), lastExact, preAns, varsMap(), matrixStore, vectorStore,
             )
-            val double = v.toDouble()
-            val text = formatValue(v)
-            preAns = ans
-            ans = double
-            lastValue = double
-            lastExact = v
-            lastComplex = null
-            resultText = text
-            previewText = ""
-            isError = false
-            pushHistory(src, text)
-            justEvaluated = true
+            presentValue(src, v)
         } catch (_: CalcSyntaxError) {
-            resultText = "\u8BED\u6CD5\u9519\u8BEF"
-            previewText = ""
-            isError = true
-            justEvaluated = false
+            syntaxError()
         } catch (_: CalcMathError) {
-            resultText = "\u6570\u5B66\u9519\u8BEF"
+            mathError()
+        } catch (e: NumericError) {
+            resultText = e.message ?: "\u6570\u5B66\u9519\u8BEF"
             previewText = ""
             isError = true
+            solutionItems = emptyList()
             justEvaluated = false
         } catch (_: Exception) {
-            resultText = "\u6570\u5B66\u9519\u8BEF"
-            previewText = ""
-            isError = true
-            justEvaluated = false
+            mathError()
         }
+    }
+
+    private fun syntaxError() {
+        resultText = "\u8BED\u6CD5\u9519\u8BEF"
+        previewText = ""
+        isError = true
+        solutionItems = emptyList()
+        justEvaluated = false
+    }
+
+    private fun mathError() {
+        resultText = "\u6570\u5B66\u9519\u8BEF"
+        previewText = ""
+        isError = true
+        solutionItems = emptyList()
+        justEvaluated = false
+    }
+
+    /** 普通求值结果：复数走复数轨，矩阵 / 向量直接上屏 */
+    private fun presentValue(src: String, v: CalcValue) {
+        when (v) {
+            is CalcValue.Scalar -> {
+                val c = v.c
+                if (abs(c.im.toDouble()) > 1e-12 || src.contains(ANGLE_SIGN)) {
+                    // 复数轨：不进 Ans（与原行为一致），S⇔D 可切 直角 ⇄ r∠θ
+                    lastComplex = ComplexRect(c.re.toDouble(), c.im.toDouble())
+                    lastExact = null
+                    polarFormShown = false
+                    resultText = rectText(lastComplex!!)
+                } else {
+                    val value = c.re
+                    val d = value.toDouble()
+                    val text = formatValue(value)
+                    preAns = ans
+                    ans = d
+                    lastValue = d
+                    lastExact = value
+                    lastComplex = null
+                    resultText = text
+                }
+            }
+            is CalcValue.MatVal -> {
+                lastComplex = null
+                lastExact = null
+                resultText = v.m.format()
+            }
+            is CalcValue.VecVal -> {
+                lastComplex = null
+                lastExact = null
+                resultText = v.v.format()
+            }
+        }
+        previewText = ""
+        isError = false
+        pushHistory(src, resultText)
+        justEvaluated = true
+    }
+
+    /** REFERENCE 第 7 条：主行直接求解（方程 / 方程组） */
+    private fun runEquation(src: String) {
+        val r = EquationSolver.solve(src, angleMode)
+        resultText = r.text
+        resultNote = r.note
+        solutionItems = r.items
+        previewText = ""
+        lastComplex = null
+        lastExact = null
+        isError = r.kind == SolveKind.ERROR
+        if (r.kind == SolveKind.SOLUTIONS) {
+            val first = r.items.firstOrNull()?.insert?.toDoubleOrNull()
+            if (first != null) {
+                preAns = ans
+                ans = first
+                lastValue = first
+                lastExact = Value.Floating(first)
+            }
+        }
+        pushHistory(src, r.text)
+        justEvaluated = r.kind != SolveKind.ERROR
     }
 
     private fun refreshPreview() {
@@ -487,16 +581,19 @@ class CalcViewModel : ViewModel() {
             return
         }
         val src = CalcEngine.autoClose(expression)
-        if (src.isBlank()) {
+        if (src.isBlank() || src.contains('=')) {
             previewText = ""
             return
         }
         previewText = try {
-            formatValue(
-                CalcEngine.evaluateValue(
-                    src, angleMode, ans, memValue(), preAns = preAns, vars = varsMap(),
-                )
-            )
+            when (val v = Unified.evaluate(
+                src, angleMode, ans, memValue(), lastExact, preAns, varsMap(), matrixStore, vectorStore,
+            )) {
+                is CalcValue.Scalar ->
+                    if (abs(v.c.im.toDouble()) > 1e-12) "" else formatValue(v.c.re)
+                is CalcValue.MatVal -> ""
+                is CalcValue.VecVal -> ""
+            }
         } catch (_: Exception) {
             ""
         }
@@ -618,7 +715,21 @@ class CalcViewModel : ViewModel() {
         expression = expr
         lastComplex = null
         polarFormShown = false
+        solutionItems = emptyList()
+        resultNote = ""
         closeOverlay()
+        refreshPreview()
+    }
+
+    /** 方程多解：把某一条解插入主行（继续参与运算） */
+    fun insertSolution(text: String) {
+        if (text.isEmpty()) return
+        justEvaluated = false
+        resultText = ""
+        isError = false
+        solutionItems = emptyList()
+        resultNote = ""
+        expression = text
         refreshPreview()
     }
 

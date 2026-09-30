@@ -115,6 +115,7 @@ fun OdeScreen(onBack: () -> Unit) {
         Modifier
             .fillMaxSize()
             .background(c.body)
+            .safeAreaPadding()
             .padding(10.dp)
             .verticalScroll(rememberScrollState())
     ) {

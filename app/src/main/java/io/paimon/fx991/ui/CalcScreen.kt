@@ -3,9 +3,11 @@ package io.paimon.fx991.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -17,7 +19,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -43,6 +44,8 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -60,7 +63,7 @@ import io.paimon.fx991.engine.SiPrefixes
 import io.paimon.fx991.engine.UnitConvert
 import io.paimon.fx991.engine.label
 
-const val APP_VERSION = "1.3.0-batchC"
+const val APP_VERSION = "1.4.0-batchD"
 const val APP_REPO = "https://github.com/xiaozishan/workspace"
 
 @Composable
@@ -72,26 +75,24 @@ fun CalcApp(vm: CalcViewModel = viewModel()) {
     }
     CalcTheme(darkTheme = dark) {
         val c = LocalCalcColors.current
+        // 根 Surface 铺满整屏（含状态栏 / 导航栏区域）——背景色 edgeto-edge，
+        // 具体内容各自用 Modifier.safeAreaPadding() 避让系统 Insets。
         Surface(Modifier.fillMaxSize(), color = c.body) {
             Box(Modifier.fillMaxSize()) {
                 when (vm.screen) {
                     Screen.ODE -> OdeScreen(onBack = { vm.goto(Screen.CALC) })
                     Screen.CMPLX -> CmplxScreen(onBack = { vm.goto(Screen.CALC) })
-                    Screen.MATRIX -> MatrixScreen(onBack = { vm.goto(Screen.CALC) })
-                    Screen.VECTOR -> VectorScreen(onBack = { vm.goto(Screen.CALC) })
+                    Screen.MATRIX -> MatrixScreen(onBack = { vm.goto(Screen.CALC) }, store = vm.matrixStore)
+                    Screen.VECTOR -> VectorScreen(onBack = { vm.goto(Screen.CALC) }, store = vm.vectorStore)
                     Screen.STAT -> StatScreen(onBack = { vm.goto(Screen.CALC) })
                     Screen.DISTR -> DistrScreen(onBack = { vm.goto(Screen.CALC) })
                     Screen.FUNC_HELP -> FuncHelpScreen(vm, onBack = { vm.goto(Screen.CALC) })
-                    else -> Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(c.body)
-                            .systemBarsPadding()
-                    ) {
-                        UtilityBar(vm)
-                        LcdDeck(vm, Modifier.fillMaxWidth().weight(0.30f))
-                        KeypadDeck(vm, Modifier.fillMaxWidth().weight(0.70f))
-                    }
+                    // ---- 批次 D ----
+                    Screen.EQUATION -> EquationScreen(vm, onBack = { vm.goto(Screen.CALC) })
+                    Screen.BASEN -> BaseNScreen(onBack = { vm.goto(Screen.CALC) })
+                    Screen.TABLE -> TableScreen(onBack = { vm.goto(Screen.CALC) })
+                    Screen.RATIO -> RatioScreen(onBack = { vm.goto(Screen.CALC) })
+                    else -> CalcSurface(vm)
                 }
                 when (vm.overlay) {
                     Overlay.NONE -> Unit
@@ -115,6 +116,54 @@ fun CalcApp(vm: CalcViewModel = viewModel()) {
 }
 
 // ---------------------------------------------------------------------------
+// 主计算界面：避让系统 Insets + 自适应可用高度
+// ---------------------------------------------------------------------------
+
+/**
+ * 主计算界面。
+ *
+ * **避让**：用 [safeAreaPadding]（`WindowInsets.safeDrawing`）避开状态栏（顶）、
+ * 导航栏 / 手势条（底）、横屏挖孔（左右），键盘弹出时顺带避开 IME —— 都是系统真实上报的值，
+ * 不写死高度，所以顶栏那排键（菜单 / PRO / Σ / 设置 / 拍照 / 更多）不会被状态栏遮住。
+ *
+ * **自适配**：按扣掉安全区后的真实可用高度选布局。
+ *  - 高度富裕（常见竖屏）→ 权重布局：顶栏固定，LCD [SafeArea.LCD_WEIGHT]，键盘占其余；
+ *  - 横屏 / 小屏→ 紧凑布局：LCD 与按键行都用最小高度，整体可滚动，不把键盘压扁、不溢出屏幕。
+ */
+@Composable
+private fun CalcSurface(vm: CalcViewModel) {
+    val c = LocalCalcColors.current
+    BoxWithConstraints(
+        Modifier
+            .fillMaxSize()
+            .background(c.body)
+            .safeAreaPadding()
+    ) {
+        if (SafeArea.needsScrollLayout(maxHeight.value.toInt())) {
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+            ) {
+                UtilityBar(vm)
+                LcdDeck(vm, Modifier.fillMaxWidth().height(SafeArea.MIN_LCD_DP.dp))
+                KeypadDeck(
+                    vm = vm,
+                    modifier = Modifier.fillMaxWidth(),
+                    rowHeight = SafeArea.rowHeightDp(0).dp,
+                )
+            }
+        } else {
+            Column(Modifier.fillMaxSize()) {
+                UtilityBar(vm)
+                LcdDeck(vm, Modifier.fillMaxWidth().weight(SafeArea.LCD_WEIGHT))
+                KeypadDeck(vm, Modifier.fillMaxWidth().weight(1f - SafeArea.LCD_WEIGHT))
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // 覆盖层通用外壳
 // ---------------------------------------------------------------------------
 
@@ -126,39 +175,46 @@ private fun PanelCard(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val c = LocalCalcColors.current
+    // 月影铺满整屏（含系统栏区域）；面板本身再按安全区收进来 —— 顶到底都不会被状态栏 / 导航栏遮住。
     Box(
         Modifier
             .fillMaxSize()
             .background(Color(0xCC000000)),
-        contentAlignment = Alignment.Center,
     ) {
-        Column(
+        Box(
             Modifier
-                .fillMaxWidth(0.92f)
-                .fillMaxHeight(0.86f)
-                .clip(RoundedCornerShape(14.dp))
-                .background(c.body)
-                .border(1.dp, c.keyEdge, RoundedCornerShape(14.dp))
-                .padding(14.dp),
+                .fillMaxSize()
+                .safeAreaPadding(),
+            contentAlignment = Alignment.Center,
         ) {
-            Text(title, color = c.bodyInk, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-            if (subtitle != null) {
-                Spacer(Modifier.height(3.dp))
-                Text(subtitle, color = c.keyNeutralInk.copy(alpha = 0.7f), fontSize = 11.sp)
+            Column(
+                Modifier
+                    .fillMaxWidth(0.92f)
+                    .fillMaxHeight(0.86f)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(c.body)
+                    .border(1.dp, c.keyEdge, RoundedCornerShape(14.dp))
+                    .padding(14.dp),
+            ) {
+                Text(title, color = c.bodyInk, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                if (subtitle != null) {
+                    Spacer(Modifier.height(3.dp))
+                    Text(subtitle, color = c.keyNeutralInk.copy(alpha = 0.7f), fontSize = 11.sp)
+                }
+                Spacer(Modifier.height(10.dp))
+                Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) { content() }
+                Spacer(Modifier.height(8.dp))
+                Button(
+                    onClick = onClose,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Transparent,
+                        contentColor = ShiftOrange,
+                    ),
+                    border = BorderStroke(1.dp, ShiftOrange),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth().height(42.dp),
+                ) { Text("关闭", fontSize = 13.sp) }
             }
-            Spacer(Modifier.height(10.dp))
-            Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) { content() }
-            Spacer(Modifier.height(8.dp))
-            Button(
-                onClick = onClose,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color.Transparent,
-                    contentColor = ShiftOrange,
-                ),
-                border = BorderStroke(1.dp, ShiftOrange),
-                shape = RoundedCornerShape(10.dp),
-                modifier = Modifier.fillMaxWidth().height(42.dp),
-            ) { Text("关闭", fontSize = 13.sp) }
         }
     }
 }
@@ -204,7 +260,7 @@ private fun BodyText(text: String) {
 }
 
 // ---------------------------------------------------------------------------
-// ① 菜单：列出所有模式，未实现的置灰标注「待实现」
+// ① 菜单：列出所有模式（批次 D 后全部可用）
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -212,22 +268,21 @@ private fun ModeMenuOverlay(vm: CalcViewModel) {
     val c = LocalCalcColors.current
     PanelCard(
         title = "选择模式 MODE",
-        subtitle = "灰显条目为后续批次",
+        subtitle = "全部模式均已实现",
         onClose = { vm.closeOverlay() },
     ) {
         modeEntries().forEach { e ->
-            val enabled = e.screen != null
             MenuButton(
                 label = e.title,
-                hint = if (enabled) "进入" else "待实现",
-                enabled = enabled,
+                hint = "进入",
+                enabled = e.screen != null,
                 onClick = { e.screen?.let { vm.goto(it) } },
             )
         }
         Spacer(Modifier.height(4.dp))
         Text(
-            "批次 C 新增：复数 CMPLX · 矩阵 MATRIX · 向量 VECTOR · 统计与回归 STAT · 概率分布 DISTR · 函数帮助 FUNC HELP" +
-                "（也可用 SHIFT 层的 7 / 8 / 9 / 4 / 5 / 6 键直接进入）",
+            "批次 D 新增：方程 EQN · 基数换算 BASE-N · 函数表 TABLE · 比例 RATIO；" +
+                "批次 C：复数 / 矩阵 / 向量 / 统计 / 分布 / 函数帮助（SHIFT 层 7 / 8 / 9 / 4 / 5 / 6 键直达）",
             color = c.keyNeutralInk.copy(alpha = 0.65f),
             fontSize = 11.sp,
         )
@@ -482,6 +537,12 @@ private fun HelpPanel(vm: CalcViewModel) {
         BodyText("CALC：把当前表达式里的 x、y 代入具体值求值。")
         BodyText("°′″：度分秒 ⇄ 十进制度；只填“度”时按十进制度转度分秒，填了分/秒则按 60 进制合成度。")
         BodyText("极坐标：用 ∠ 直接输入，例如 2∠60 得到直角坐标 1 + 1.732050808i；再按 S⇔D 可切回 r∠θ。")
+        BodyText("统一输入面（不需要切模式）：主行可直接写 MatA×MatB、det(MatA)、inv(MatA)、trn(MatA)、VctA·VctB、cross(VctA,VctB)、abs(VctA)、mean(1,2,3)、sd(…)、ssd(…)、normcdf(0,1,1)、binompdf(10,3,0.5) 等；∠ 是真运算符，可以多个（9∠60+5∠6）。")
+        BodyText("主行求解：含未知量（x/y/z）且带 = 时按 = 即解方程。如 2x+3=7、x²-3x+2=0（给全部根含复根）、sin(x)=0.5（多点扫描多个根）、2x+y=5, x-y=1（方程组，, 或 ; 分隔）。无解 / 无穷多解会明确告知。等号用 ALPHA + = 输入。")
+        BodyText("方程模式（MODE 菜单）：多项式方程 2 / 3 / 4 次（含复根，能精确给精确根）；联立线性方程组 2~4 元（高斯消元 + 精确分数，无解 / 无穷多解会明说）。点解可带回主行。")
+        BodyText("基数换算 BASE-N（MODE 菜单）：DEC / HEX / BIN / OCT 互转，AND / OR / XOR / XNOR / NOT / NEG 位运算，字长 16 / 32 / 64，负数按补码显示。")
+        BodyText("函数表 TABLE（MODE 菜单）：输 f(x) 与起值 / 终值 / 步长出数值表，可开 g(x) 双函数对照，8 行一页翻页。")
+        BodyText("比例 RATIO（MODE 菜单）：a:b = c:x 与 a:b = x:d 两种形式，给精确分数解。")
         BodyText("Pol / Rec（× ÷ 的 SHIFT 层）：Pol(x,y) 给 r、θ；Rec(r,θ) 给 x、y；角度制跟随设置。")
         BodyText("STO（RCL 的 SHIFT 层）：把当前结果存入 A–F / x / y / M，或把变量插入表达式。")
         BodyText("ENG（工程记数）：按一下切到指数为 3 倍数的显示，再按回到普通；数字格式也可在设置里切。")
@@ -816,7 +877,7 @@ private fun UtilityBar(vm: CalcViewModel) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(46.dp)
+            .height(SafeArea.UTILITY_BAR_DP.dp)
             .padding(horizontal = 8.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -966,12 +1027,57 @@ private fun ResultLine(vm: CalcViewModel) {
         showResult -> c.lcdFg
         else -> c.lcdDim
     }
-    Box(Modifier.fillMaxWidth().height(46.dp), contentAlignment = Alignment.BottomStart) {
-        LcdMathLine(
-            expr = text,
-            style = NatStyle(resultFont(text.length), color, bold = showResult && !vm.isError),
-            modifier = Modifier.fillMaxSize(),
-        )
+    Column(Modifier.fillMaxWidth()) {
+        // 方程多解：逐条可插入（REFERENCE 第 7 条）
+        if (vm.solutionItems.isNotEmpty()) {
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                vm.solutionItems.forEach { s ->
+                    val ins = s.insert
+                    Button(
+                        onClick = { ins?.let { vm.insertSolution(it) } },
+                        enabled = !ins.isNullOrEmpty(),
+                        shape = RoundedCornerShape(7.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                        border = BorderStroke(1.dp, c.lcdEdge),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color.Transparent,
+                            contentColor = c.lcdFg,
+                            disabledContainerColor = Color.Transparent,
+                            disabledContentColor = c.lcdDim.copy(alpha = 0.5f),
+                        ),
+                        modifier = Modifier.height(26.dp),
+                    ) { Text(s.label, fontFamily = Mono, fontSize = 10.5.sp, maxLines = 1) }
+                }
+            }
+            Spacer(Modifier.height(2.dp))
+        }
+        Box(Modifier.fillMaxWidth().height(46.dp), contentAlignment = Alignment.BottomStart) {
+            if (text.contains('\n')) {
+                // 矩阵结果：多行纯文本
+                Text(
+                    text,
+                    color = color,
+                    fontFamily = Mono,
+                    fontSize = 13.sp,
+                    lineHeight = 15.sp,
+                    maxLines = 4,
+                    overflow = TextOverflow.Clip,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                LcdMathLine(
+                    expr = text,
+                    style = NatStyle(resultFont(text.length), color, bold = showResult && !vm.isError),
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+        if (vm.resultNote.isNotEmpty()) {
+            Text(vm.resultNote, color = c.lcdDim, fontSize = 9.5.sp, maxLines = 2)
+        }
     }
 }
 
@@ -986,12 +1092,18 @@ private fun resultFont(len: Int) = when {
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun KeypadDeck(vm: CalcViewModel, modifier: Modifier) {
+private fun KeypadDeck(vm: CalcViewModel, modifier: Modifier, rowHeight: Dp? = null) {
     val rows = remember { keypadRows() }
     val click = rememberKeyClick(vm)
     Column(modifier.padding(start = 4.dp, end = 4.dp, top = 3.dp, bottom = 5.dp)) {
         rows.forEach { row ->
-            Row(Modifier.fillMaxWidth().weight(1f)) {
+            // rowHeight != null 时走紧凑布局（固定行高，整体可滚动）；否则撑满剩余高度（权重布局）
+            val rowModifier = if (rowHeight != null) {
+                Modifier.fillMaxWidth().height(rowHeight)
+            } else {
+                Modifier.fillMaxWidth().weight(1f)
+            }
+            Row(rowModifier) {
                 row.forEach { key ->
                     if (key.kind == KeyKind.NAV) {
                         DPad(
@@ -1142,7 +1254,7 @@ private fun androidx.compose.foundation.layout.RowScope.PadKey(
 }
 
 // ---------------------------------------------------------------------------
-// 动作分发：SHIFT/ALPHA 层优先；占位键弹提示，其余交给 ViewModel
+// 动作分发：SHIFT/ALPHA 层优先，其余交给 ViewModel（全部按键都有真行为，无占位键）
 // ---------------------------------------------------------------------------
 
 @Composable

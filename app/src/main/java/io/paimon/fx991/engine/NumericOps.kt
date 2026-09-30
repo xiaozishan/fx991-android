@@ -347,17 +347,10 @@ object PolarForm {
         return PolarPair(clean(r), clean(theta))
     }
 
-    /** 解析含 `∠` 的表达式（最多一个 `∠`），返回直角坐标复数 */
-    fun evaluate(expr: String, mode: AngleMode, ans: Double, mem: Double): ComplexRect {
-        val idx = expr.indexOf('\u2220')
-        if (idx < 0) throw CalcSyntaxError("语法错误")
-        val left = expr.substring(0, idx)
-        val right = expr.substring(idx + 1)
-        if (left.isBlank() || right.isBlank()) throw CalcSyntaxError("语法错误")
-        val r = CalcEngine.evaluate(CalcEngine.autoClose(left), mode, ans, mem)
-        val th = CalcEngine.evaluate(CalcEngine.autoClose(right), mode, ans, mem)
-        return toRect(r, th, mode)
-    }
+    /**
+     * 极坐标运算符 `∠` 已提升为表达式语法里的真运算符（见 Unified），
+     * 这里不再保留「整串特例解析、最多一个 ∠」的旧分支。
+     */
 
     /** 极坐标形式文本：r∠θ */
     fun formatPolar(p: PolarPair): String =

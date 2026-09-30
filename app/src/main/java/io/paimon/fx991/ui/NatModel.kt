@@ -16,7 +16,7 @@ sealed interface Nat {
 }
 
 internal enum class DT {
-    NUM, IDENT, PLUS, MINUS, MUL, DIV, POW, FACT, PCT, SQ2, CUBE, RECIP, SUP, LP, RP, SQRT, COMMA, ANGLE, END
+    NUM, IDENT, PLUS, MINUS, MUL, DIV, POW, FACT, PCT, SQ2, CUBE, RECIP, SUP, LP, RP, SQRT, COMMA, ANGLE, EQ, SEMI, DOT, END
 }
 
 internal class DTok(val t: DT, val s: String)
@@ -84,6 +84,9 @@ internal fun dlex(src: String): List<DTok> {
             c == CH_CUBE -> { out.add(DTok(DT.CUBE, CH_CUBE.toString())); i++ }
             c == CH_SIGMA -> { out.add(DTok(DT.IDENT, "\u03A3")); i++ }
             c == ',' -> { out.add(DTok(DT.COMMA, ",")); i++ }
+            c == '=' -> { out.add(DTok(DT.EQ, "=")); i++ }
+            c == ';' -> { out.add(DTok(DT.SEMI, ";")); i++ }
+            c == '\u00B7' -> { out.add(DTok(DT.DOT, "\u00B7")); i++ }
             c == '\u2220' -> { out.add(DTok(DT.ANGLE, "\u2220")); i++ }
             c in SUP_ALL || c == CH_SUP_MINUS -> {
                 val s = i
@@ -120,9 +123,12 @@ internal class NatParser(private val ts: List<DTok>) {
             when {
                 eat(DT.PLUS) -> { parts.add(Nat.Sym("+")); parts.add(term()) }
                 eat(DT.MINUS) -> { parts.add(Nat.Sym("\u2212")); parts.add(term()) }
-                // 参数分隔与极坐标：都当作行内符号，保证自然书写里能画出来
+                // 参数分隔 / 极坐标 / 等号 / 分号 / 点乘：都当作行内符号，保证自然书写里能画出来
                 eat(DT.COMMA) -> { parts.add(Nat.Sym(",")); parts.add(term()) }
                 eat(DT.ANGLE) -> { parts.add(Nat.Sym("\u2220")); parts.add(term()) }
+                eat(DT.EQ) -> { parts.add(Nat.Sym("=")); parts.add(term()) }
+                eat(DT.SEMI) -> { parts.add(Nat.Sym(";")); parts.add(term()) }
+                eat(DT.DOT) -> { parts.add(Nat.Sym("\u00B7")); parts.add(term()) }
                 else -> break
             }
         }
