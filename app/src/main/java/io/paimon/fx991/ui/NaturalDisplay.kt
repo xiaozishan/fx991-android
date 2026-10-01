@@ -87,7 +87,7 @@ private fun CursorGlyph(style: NatStyle, signal: Int) {
 private fun NatNodeView(node: Nat, style: NatStyle, signal: Int = -1) {
     when (node) {
         is Nat.Sym -> Text(
-            text = node.text,
+            text = natDisplayName(node.text),
             color = style.color,
             fontFamily = MonoFont,
             fontSize = style.size,
@@ -110,6 +110,31 @@ private fun NatNodeView(node: Nat, style: NatStyle, signal: Int = -1) {
             Box(Modifier.padding(bottom = (style.size.value * 0.35f).dp)) {
                 NatNodeView(node.exp, style.copy(size = style.size * 0.68f), signal)
             }
+        }
+
+        // 批次 K3：定积分模板 —— ∫ 右上是上限、右下是下限，被积式随后，末尾 dx
+        is Nat.Integ -> Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "\u222B",
+                color = style.color,
+                fontFamily = MonoFont,
+                fontSize = style.size * 1.5f,
+                fontWeight = if (style.bold) FontWeight.Bold else FontWeight.Normal,
+                maxLines = 1,
+            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                NatNodeView(node.hi, style.copy(size = style.size * 0.68f), signal)
+                NatNodeView(node.lo, style.copy(size = style.size * 0.68f), signal)
+            }
+            NatNodeView(node.body, style, signal)
+            Text(
+                text = "dx",
+                color = style.color,
+                fontFamily = MonoFont,
+                fontSize = style.size,
+                fontWeight = if (style.bold) FontWeight.Bold else FontWeight.Normal,
+                maxLines = 1,
+            )
         }
     }
 }

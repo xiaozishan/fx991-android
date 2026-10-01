@@ -225,7 +225,8 @@ internal val FUNC2_NAMES = setOf("logb", "root", "npr", "ncr",
 internal val MAT_FUNC_NAMES = setOf("det", "inv", "trn")
 
 /** 统一输入面的可变参数函数（1~4 个参数）：统计 / 分布 / 向量；
- *  批次 G 再加 res / cint（复变，首参为 z 表达式）与 fourier（主行拦截，这里只为解析放行） */
+ *  批次 G 再加 res / cint（复变，首参为 z 表达式）与 fourier（主行拦截，这里只为解析放行）；
+ *  批次 K3 再加 int / deriv / sum / lim / dms / calc / pol / rec / ranint（就地括号调用，原面板主行形态） */
 internal val VARARG_NAMES = setOf(
     "mean", "sd", "ssd", "sigma",
     "cross", "dot",
@@ -233,6 +234,8 @@ internal val VARARG_NAMES = setOf(
     "binompdf", "binomcdf",
     "poissonpdf", "poissoncdf",
     "res", "cint", "fourier",
+    // 批次 K3
+    "int", "deriv", "sum", "lim", "dms", "calc", "pol", "rec", "ranint",
 )
 
 // ---------------------------------------------------------------------------
@@ -414,6 +417,11 @@ internal class Parser(private val ts: List<Token>, private val extraIdents: Set<
             "tan\u207B\u00B9", "atan" -> "atan"
             else -> text.lowercase()
         }
+        // 批次 K3：就地括号调用 —— 常数 / SI 前缀 / 单位换算在语法层直接展开成数值节点
+        // （const(c) → 光速值；si(1500,k) → 1500÷10³；conv(5,km,mi) → 5×10³÷1609.344）
+        if (name == "const") return constInline()
+        if (name == "si") return siInline()
+        if (name == "conv") return convInline()
         if (name in FUNC2_NAMES) {
             if (!eat(Tok.LP)) throw CalcSyntaxError("语法错误")
             val a = expr()
@@ -459,6 +467,89 @@ internal class Parser(private val ts: List<Token>, private val extraIdents: Set<
         }
         val arg = if (ts[i].t == Tok.LP) paren() else unary()
         return Node.Fn(name, arg)
+    }
+
+    // -------------------------------------------------------------------
+    // 批次 K3：就地括号调用的语法层展开（const / si / conv）
+    //   这三个的「参数」是符号名（g / k / km / mi …），不是表达式，
+    //   所以在语法层读原始 token 并直接展开成数值节点 —— 双轨内核零改动。
+    // -------------------------------------------------------------------
+
+    /** 读一个原始符号：字母 / 数字 / 上标² ³ token 直接拼接，直到逗号或右括号（如 cm²、NA、μ0、R∞） */
+    private fun rawSymbol(): String {
+        val sb = StringBuilder()
+        while (true) {
+            val t = cur()
+            when (t.t) {
+                Tok.IDENT, Tok.NUM -> {
+                    sb.append(t.s)
+                    i++
+                }
+                Tok.SQ2 -> {
+                    sb.append('\u00B2')
+                    i++
+                }
+                Tok.CUBE -> {
+                    sb.append('\u00B3')
+                    i++
+                }
+                else -> return sb.toString()
+            }
+        }
+    }
+
+    /** const(符号)：科学常数就地引用，如 const(g) / const(c) / const(NA) */
+    private fun constInline(): Node {
+        if (!eat(Tok.LP)) throw CalcSyntaxError("const 需要括号：const(符号)，如 const(g)")
+        val sym = rawSymbol()
+        if (!eat(Tok.RP)) throw CalcSyntaxError("缺少右括号")
+        val k = SciConstants.find(sym)
+            ?: throw CalcSyntaxError("未知科学常数 $sym（如 const(g) / const(c) / const(NA)）")
+        return Node.Num(k.value, CalcEngine.literal(k.value))
+    }
+
+    /** si(值, 前缀)：值按目标前缀计的读数 = 值 ÷ 前缀因子，如 si(1500, k) = 1.5（即 1.5k） */
+    private fun siInline(): Node {
+        if (!eat(Tok.LP)) throw CalcSyntaxError("si 需要括号：si(值, 前缀)，如 si(1500, k)")
+        val v = expr()
+        if (!eat(Tok.COMMA)) throw CalcSyntaxError("si 需要两个参数：si(值, 前缀)")
+        val sym = rawSymbol()
+        if (!eat(Tok.RP)) throw CalcSyntaxError("缺少右括号")
+        val p = SiPrefixes.find(sym)
+            ?: throw CalcSyntaxError("未知 SI 前缀 $sym（Y Z E P T G M k h da d c m μ n p f a z y）")
+        return Node.Div(v, Node.Num(p.factor, CalcEngine.literal(p.factor)))
+    }
+
+    /** conv(值, 源单位, 目标单位)：同量纲倍数换算；温度（写作 C / F / K）走仿射展开 */
+    private fun convInline(): Node {
+        if (!eat(Tok.LP)) throw CalcSyntaxError("conv 需要括号：conv(值, 源单位, 目标单位)，如 conv(5, km, mi)")
+        val v = expr()
+        if (!eat(Tok.COMMA)) throw CalcSyntaxError("conv 需要三个参数：conv(值, 源单位, 目标单位)")
+        val from = rawSymbol()
+        if (!eat(Tok.COMMA)) throw CalcSyntaxError("conv 需要三个参数：conv(值, 源单位, 目标单位)")
+        val to = rawSymbol()
+        if (!eat(Tok.RP)) throw CalcSyntaxError("缺少右括号")
+        val f = UnitConvert.findUnit(from) ?: throw CalcSyntaxError("未知单位 $from（如 km / mi / kg / lb / mL / gal / C / F / K）")
+        val t = UnitConvert.findUnit(to) ?: throw CalcSyntaxError("未知单位 $to（如 km / mi / kg / lb / mL / gal / C / F / K）")
+        if (f.first !== t.first) throw CalcSyntaxError("单位量纲不一致：$from 与 $to 不是同一类")
+        if (!f.first.affine) {
+            // v × factor(源) ÷ factor(目标)
+            return Node.Div(
+                Node.Mul(v, Node.Num(f.second.factor, CalcEngine.literal(f.second.factor))),
+                Node.Num(t.second.factor, CalcEngine.literal(t.second.factor)),
+            )
+        }
+        // 温度：先归一到摄氏，再从摄氏展开到目标
+        val celsius = when (f.second.symbol) {
+            "°C" -> v
+            "°F" -> Node.Mul(Node.Sub(v, Node.Num(32.0, "32")), Node.Num(5.0 / 9.0))
+            else -> Node.Sub(v, Node.Num(273.15, "273.15"))
+        }
+        return when (t.second.symbol) {
+            "°C" -> celsius
+            "°F" -> Node.Add(Node.Mul(celsius, Node.Num(9.0 / 5.0)), Node.Num(32.0, "32"))
+            else -> Node.Add(celsius, Node.Num(273.15, "273.15"))
+        }
     }
 }
 

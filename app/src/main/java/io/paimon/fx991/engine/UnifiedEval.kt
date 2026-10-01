@@ -138,6 +138,75 @@ internal class UnifiedEvaluator(
                 "res" -> cplxRes(n.args)
                 "cint" -> cplxCint(n.args)
                 "fourier" -> throw CalcMathError("fourier 请单独作为主行表达式按 = 计算")
+                // ---- 批次 K3：就地括号调用（原数值功能面板的主行形态；算法复用 NumericOps 等）----
+                "int" -> {
+                    if (n.args.size != 3) throw CalcSyntaxError("int 需要三个参数：int(f(x), 下限, 上限)")
+                    val f = NodeText.render(n.args[0])
+                    val a = real(one(eval(n.args[1])))
+                    val b = real(one(eval(n.args[2])))
+                    CalcValue.Scalar(ComplexNum(Value.of(NumericOps.integrate(f, mode, a, b, 1e-10)), zeroV))
+                }
+                "deriv" -> {
+                    if (n.args.size != 2) throw CalcSyntaxError("deriv 需要两个参数：deriv(f(x), x值)")
+                    val f = NodeText.render(n.args[0])
+                    val x = real(one(eval(n.args[1])))
+                    CalcValue.Scalar(ComplexNum(Value.of(NumericOps.derivative(f, mode, x)), zeroV))
+                }
+                "sum" -> {
+                    if (n.args.size != 3) throw CalcSyntaxError("sum 需要三个参数：sum(f(x), 下界, 上界)")
+                    val f = NodeText.render(n.args[0])
+                    val a = longOf(n.args[1], "下界")
+                    val b = longOf(n.args[2], "上界")
+                    CalcValue.Scalar(ComplexNum(Value.of(NumericOps.summation(f, mode, a, b)), zeroV))
+                }
+                "lim" -> {
+                    if (n.args.size != 2) throw CalcSyntaxError("lim 需要两个参数：lim(f(x), x→)")
+                    val f = NodeText.render(n.args[0])
+                    val x0 = real(one(eval(n.args[1])))
+                    val r = NumericOps.limit(f, mode, x0)
+                    if (r.equal) {
+                        CalcValue.Scalar(ComplexNum(Value.of(r.value()), zeroV))
+                    } else {
+                        throw NumericError(
+                            "左右极限不相等：左 ${CalcEngine.format(r.left, 10, null)}" +
+                                "｜右 ${CalcEngine.format(r.right, 10, null)}",
+                        )
+                    }
+                }
+                "dms" -> {
+                    if (n.args.size != 3) throw CalcSyntaxError("dms 需要三个参数：dms(度, 分, 秒)")
+                    val d = real(one(eval(n.args[0])))
+                    val m = real(one(eval(n.args[1])))
+                    val s = real(one(eval(n.args[2])))
+                    CalcValue.Scalar(ComplexNum(Value.of(Sexagesimal.toDegrees(d, m, s)), zeroV))
+                }
+                "calc" -> {
+                    // 代入求值：按当前变量（x / y / STO 变量）值计算 —— 就是当前上下文求值本身
+                    if (n.args.size != 1) throw CalcSyntaxError("calc 需要一个参数：calc(表达式)")
+                    eval(n.args[0])
+                }
+                "pol" -> {
+                    if (n.args.size != 2) throw CalcSyntaxError("pol 需要两个参数：pol(x, y)")
+                    val x = real(one(eval(n.args[0])))
+                    val y = real(one(eval(n.args[1])))
+                    val p = PolarForm.toPolar(x, y, mode)
+                    Unified.lastNote = "Pol：r = ${CalcEngine.format(p.r, 10, null)}，" +
+                        "θ = ${CalcEngine.format(p.theta, 10, null)}（S⇔D 切极坐标显示）"
+                    CalcValue.Scalar(ComplexNum(Value.of(x), Value.of(y)))
+                }
+                "rec" -> {
+                    if (n.args.size != 2) throw CalcSyntaxError("rec 需要两个参数：rec(r, θ)")
+                    val r = real(one(eval(n.args[0])))
+                    val th = real(one(eval(n.args[1])))
+                    val c = PolarForm.toRect(r, th, mode)
+                    CalcValue.Scalar(ComplexNum(Value.of(c.re), Value.of(c.im)))
+                }
+                "ranint" -> {
+                    if (n.args.size != 2) throw CalcSyntaxError("ranint 需要两个参数：ranint(下界, 上界)")
+                    val a = longOf(n.args[0], "下界")
+                    val b = longOf(n.args[1], "上界")
+                    CalcValue.Scalar(ComplexNum(Value.of(RandomOps.ranInt(a, b).toDouble()), zeroV))
+                }
                 else -> fnN(n.name, n.args.map { eval(it) })
             }
             is Node.Neg -> CalcValue.Scalar(negC(one(eval(n.a))))
@@ -399,6 +468,13 @@ internal class UnifiedEvaluator(
         val d = real(one(v))
         if (d != kotlin.math.floor(d)) throw NumericError("$label 必须是整数")
         return d.toInt()
+    }
+
+    /** 批次 K3：直接对子树求整数参数（sum / ranint 的上下界） */
+    private fun longOf(node: Node, label: String): Long {
+        val d = real(one(eval(node)))
+        if (d != kotlin.math.floor(d)) throw NumericError("$label 必须是整数")
+        return d.toLong()
     }
 
     // ---- 批次 G：复变（留数 / 围道积分） ----

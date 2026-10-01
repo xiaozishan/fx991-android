@@ -28,6 +28,12 @@ sealed interface Nat {
         override var srcStart: Int = -1
         override var srcEnd: Int = -1
     }
+
+    /** 批次 K3：定积分二维模板 int(式, 下限, 上限) → 屏显 ∫_下限^上限 式 dx */
+    class Integ(val body: Nat, val lo: Nat, val hi: Nat) : Nat {
+        override var srcStart: Int = -1
+        override var srcEnd: Int = -1
+    }
     class Sym(val text: String) : Nat {
         override var srcStart: Int = -1
         override var srcEnd: Int = -1
@@ -61,6 +67,13 @@ private const val CH_SQRT = '\u221A'
 private const val CH_SIGMA = '\u03A3'
 
 internal const val SUP_ALL = "\u2070\u00B9\u00B2\u00B3\u2074\u2075\u2076\u2077\u2078\u2079"
+
+/** 批次 K3：屏显别名（只影响渲染与 ASCII 投影；源码与 natLinear 回写仍用原名） */
+internal fun natDisplayName(s: String): String = when (s) {
+    "deriv" -> "d/dx"
+    "sum" -> "\u03A3"
+    else -> s
+}
 
 /** 上标字符 → 普通字符 */
 internal fun deSup(s: String): String {
@@ -162,7 +175,12 @@ internal class NatParser(private val ts: List<DTok>) {
 
     fun parse(): Nat = expr()
 
-    private fun expr(): Nat {
+    private fun expr(): Nat = exprLevel(true)
+
+    /** 批次 K3：模板槽位用的表达式 —— 逗号不当行内符号（留给槽位切分） */
+    private fun argExpr(): Nat = exprLevel(false)
+
+    private fun exprLevel(commaInline: Boolean): Nat {
         val parts = ArrayList<Nat>()
         parts.add(term())
         while (true) {
@@ -170,7 +188,11 @@ internal class NatParser(private val ts: List<DTok>) {
             val op = when (cur().t) {
                 DT.PLUS -> take(DT.PLUS)!!.let { Nat.Sym("+").sp(it.start, it.end) }
                 DT.MINUS -> take(DT.MINUS)!!.let { Nat.Sym("\u2212").sp(it.start, it.end) }
-                DT.COMMA -> take(DT.COMMA)!!.let { Nat.Sym(",").sp(it.start, it.end) }
+                DT.COMMA -> if (commaInline) {
+                    take(DT.COMMA)!!.let { Nat.Sym(",").sp(it.start, it.end) }
+                } else {
+                    null
+                }
                 DT.ANGLE -> take(DT.ANGLE)!!.let { Nat.Sym("\u2220").sp(it.start, it.end) }
                 DT.EQ -> take(DT.EQ)!!.let { Nat.Sym("=").sp(it.start, it.end) }
                 DT.SEMI -> take(DT.SEMI)!!.let { Nat.Sym(";").sp(it.start, it.end) }
@@ -272,6 +294,10 @@ internal class NatParser(private val ts: List<DTok>) {
         }
         DT.IDENT -> {
             val tok = take(DT.IDENT)!!
+            // 批次 K3：int(式,下,上) → 二维定积分模板（结构不符时回退通用渲染）
+            if (tok.s == "int" && cur().t == DT.LP) {
+                integTemplate(tok)?.let { return it }
+            }
             val arg = when {
                 cur().t == DT.LP -> group()
                 // 隐式参数（如 sin x、x y）只允许从 数字/标识符/根号/负号 开始；
@@ -295,6 +321,25 @@ internal class NatParser(private val ts: List<DTok>) {
         items.add(e)
         items.add(Nat.Sym(")").sp(rp?.start ?: e.srcEnd, rp?.end ?: e.srcEnd))
         return rowOf(items)
+    }
+
+    /** 批次 K3：int(式, 下限, 上限) → Nat.Integ 二维模板；槽位可空（空槽光标可落） */
+    private fun integTemplate(tok: DTok): Nat? {
+        val save = i
+        take(DT.LP)!!
+        val body = argExpr()
+        if (take(DT.COMMA) == null) {
+            i = save
+            return null
+        }
+        val lo = argExpr()
+        if (take(DT.COMMA) == null) {
+            i = save
+            return null
+        }
+        val hi = argExpr()
+        val rp = take(DT.RP)
+        return Nat.Integ(body, lo, hi).sp(tok.start, rp?.end ?: hi.srcEnd)
     }
 }
 
@@ -339,7 +384,7 @@ private fun hcat(a: AsciiBlock, b: AsciiBlock): AsciiBlock {
 }
 
 fun natAscii(n: Nat): AsciiBlock = when (n) {
-    is Nat.Sym -> AsciiBlock(listOf(if (n.text.isEmpty()) " " else n.text), 0)
+    is Nat.Sym -> AsciiBlock(listOf(if (n.text.isEmpty()) " " else natDisplayName(n.text)), 0)
 
     // 批次 K3-A：光标在 ASCII 投影里画成 ▏（回归测试据此断言光标落点）
     is Nat.Cursor -> AsciiBlock(listOf("\u258F"), 0)
@@ -376,6 +421,20 @@ fun natAscii(n: Nat): AsciiBlock = when (n) {
         val b = natAscii(n.base)
         val e = natAscii(n.exp)
         hcat(b, AsciiBlock(e.lines, e.baseline + 1))
+    }
+
+    // 批次 K3：∫ 上限摞右上、下限右下，被积式随后，末尾 dx
+    is Nat.Integ -> {
+        val b = natAscii(n.body)
+        val hiB = natAscii(n.hi)
+        val loB = natAscii(n.lo)
+        val wLim = maxOf(blockedWidth(hiB), blockedWidth(loB))
+        val mid = hcat(hcat(AsciiBlock(listOf("\u222B"), 0), b), AsciiBlock(listOf(" dx"), 0))
+        val lines = ArrayList<String>()
+        hiB.lines.forEach { lines.add(" " + center(it.trimEnd(), wLim)) }
+        lines.addAll(mid.lines)
+        loB.lines.forEach { lines.add(" " + center(it.trimEnd(), wLim)) }
+        AsciiBlock(lines, hiB.lines.size + mid.baseline)
     }
 }
 

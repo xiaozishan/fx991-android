@@ -72,7 +72,7 @@ import io.paimon.fx991.engine.SiPrefixes
 import io.paimon.fx991.engine.UnitConvert
 import io.paimon.fx991.engine.label
 
-const val APP_VERSION = "1.10.0-updatecheck"
+const val APP_VERSION = "1.11.0-inline"
 const val APP_REPO = "https://github.com/xiaozishan/workspace"
 
 @Composable
@@ -724,26 +724,28 @@ private fun HistoryPanel(vm: CalcViewModel) {
 @Composable
 private fun HelpPanel(vm: CalcViewModel) {
     PanelCard(title = "使用帮助", onClose = { vm.closeOverlay() }) {
-        BodyText("变量：表达式里的自变量统一写作 x（d/dx、∫dx、Σ、SOLVE、Limit 都认 x）。")
-        BodyText("∫dx：填 f(x) 与上下限 a、b，可显式设置容差（自适应 Simpson）。")
-        BodyText("d/dx：填 f(x) 与 x 值，中心差分 + Richardson 外推。")
-        BodyText("Σ：填 f(x) 与整数上下界，Σ(f(x), x, a, b)。")
-        BodyText("SOLVE：填 f(x)=0 的 f(x) 与初值，牛顿法为主、不收敛退二分，能还原精确分数。")
-        BodyText("Limit：填 f(x) 与 x→，左右极限分别给出，不等时会提示。")
-        BodyText("CALC：把当前表达式里的 x、y 代入具体值求值。")
-        BodyText("°′″：度分秒 ⇄ 十进制度；只填“度”时按十进制度转度分秒，填了分/秒则按 60 进制合成度。")
+        BodyText("变量：表达式里的自变量统一写作 x（int / deriv / sum / lim / solve 都认 x）。")
+        BodyText("批次 K3：功能键全部就地括号调用、不再弹面板 —— 按一下就在主行写出带括号的调用，光标落进括号里直接用二维编辑器写。")
+        BodyText("∫dx：插入二维积分模板 int(式,下限,上限)，屏显 ∫_下^上 式 dx，如 int(x^2, 0, 1)。")
+        BodyText("d/dx（∫dx 的 SHIFT 层）：deriv(式, x值)，如 deriv(sin(x), 1)，中心差分 + Richardson 外推。")
+        BodyText("Σ（logₓy 的 SHIFT 层）：sum(式, 下界, 上界)，如 sum(x, 1, 10)。")
+        BodyText("SOLVE（CALC 的 SHIFT 层）：solve(方程)，括号里直接写方程，如 solve(2x+3=7)；不带等号按 f(x)=0 求根。")
+        BodyText("Limit（9 的 SHIFT 层）：lim(式, x→)，如 lim(sin(x)/x, 0)；左右极限不等会明说。")
+        BodyText("CALC：calc(式) —— 按当前 x / y / 变量值代入求值。")
+        BodyText("°′″：dms(度, 分, 秒) → 十进制度，如 dms(1, 30, 0) = 1.5。")
+        BodyText("hyp：插入 sinh()，光标还在调用口时重复按 → sinh / cosh / tanh 循环；反双曲直接写 asinh( 等。")
         BodyText("极坐标：用 ∠ 直接输入，例如 2∠60 得到直角坐标 1 + 1.732050808i；再按 S⇔D 可切回 r∠θ。")
+        BodyText("Pol / Rec（+ − 的 SHIFT 层）：pol(x, y) 附注给 r、θ（S⇔D 切极坐标显示）；rec(r, θ) 给 x + yi。")
+        BodyText("STO（RCL 的 SHIFT 层）：sto(式, 变量) 就地赋值，如 sto(5+3, A)；变量 A–F / x / y / M。CLRv（RCL 的 ALPHA 层）清全部变量；x⇄y（S⇔D 的 SHIFT 层）交换 x 与 y。")
         BodyText("统一输入面（不需要切模式）：主行可直接写 MatA×MatB、det(MatA)、inv(MatA)、trn(MatA)、VctA·VctB、cross(VctA,VctB)、abs(VctA)、mean(1,2,3)、sd(…)、ssd(…)、normcdf(0,1,1)、binompdf(10,3,0.5) 等；∠ 是真运算符，可以多个（9∠60+5∠6）。")
         BodyText("主行求解：含未知量（x/y/z）且带 = 时按 = 即解方程。如 2x+3=7、x²-3x+2=0（给全部根含复根）、sin(x)=0.5（多点扫描多个根）、2x+y=5, x-y=1（方程组，, 或 ; 分隔）。无解 / 无穷多解会明确告知。等号用 ALPHA + CALC 输入。")
         BodyText("方程模式（MODE 菜单）：多项式方程 2 / 3 / 4 次（含复根，能精确给精确根）；联立线性方程组 2~4 元（高斯消元 + 精确分数，无解 / 无穷多解会明说）。点解可带回主行。")
         BodyText("基数换算 BASE-N（MODE 菜单）：DEC / HEX / BIN / OCT 互转，AND / OR / XOR / XNOR / NOT / NEG 位运算，字长 16 / 32 / 64，负数按补码显示。")
         BodyText("函数表 TABLE（MODE 菜单）：输 f(x) 与起值 / 终值 / 步长出数值表，可开 g(x) 双函数对照，8 行一页翻页。")
         BodyText("比例 RATIO（MODE 菜单）：a:b = c:x 与 a:b = x:d 两种形式，给精确分数解。")
-        BodyText("Pol / Rec（+ − 的 SHIFT 层）：Pol(x,y) 给 r、θ；Rec(r,θ) 给 x、y；角度制跟随设置。")
-        BodyText("STO（RCL 的 SHIFT 层）：把当前结果存入 A–F / x / y / M，或把变量插入表达式；CLRv（RCL 的 ALPHA 层）清空全部变量；x⇄y（S⇔D 的 SHIFT 层）交换 x 与 y。")
         BodyText("ENG（工程记数）：按一下切到指数为 3 倍数的显示，再按回到普通；数字格式也可在设置里切。")
-        BodyText("CONST / CONV / SI（7 / 8 键的 SHIFT、ALPHA 层）：科学常数表 · 单位换算（含温度）· SI 前缀换算；Limit / ∞ 在 9 键。")
-        BodyText("Ran# / RanInt（. 键的 SHIFT / ALPHA 层）：Ran# 插入 0–1 随机数；RanInt 指定上下界与次数。")
+        BodyText("CONST / CONV / SI（7 / 8 键的 SHIFT、ALPHA 层）：const(符号) 就地引用科学常数（如 const(g)、const(NA)）；conv(值, 从, 到) 单位换算（如 conv(5, km, mi)，温度写作 C / F / K）；si(值, 前缀) 前缀读数（si(1500, k) = 1.5）。")
+        BodyText("Ran# / RanInt（. 键的 SHIFT / ALPHA 层）：Ran# 插入 0–1 随机数；ranint(下界, 上界) 随机整数。")
         BodyText("COPY / PASTE（0 键的 SHIFT / ALPHA 层）：复制 / 粘贴主行表达式；PreAns（Ans 的 ALPHA 层）：上上次结果；History（= 的 SHIFT 层）：历史记录页，可回填 / 单条删除。")
         BodyText("CLR ALL（AC 的 SHIFT 层）：全清（历史 / 变量 / M / 设置）——会先弹确认框；M− 在 M+ 的 SHIFT 层。")
         BodyText("整数与取整：gcd( / lcm(（× ÷ 的 ALPHA 层）· ceil( / floor(（+ − 的 ALPHA 层）· mod(（√x 的 ALPHA 层）；余切 Cot / Cot⁻¹ 在 ENG / ( 的 ALPHA 层；虚数单位 i 在 ENG 的 SHIFT 层。")

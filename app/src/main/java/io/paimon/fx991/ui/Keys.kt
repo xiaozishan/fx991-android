@@ -38,11 +38,19 @@ sealed interface KeyAction {
     data object More : KeyAction
     data object Pro : KeyAction
     data object Photo : KeyAction
-    /** 打开某个数值功能对话框（∫dx / d/dx / Σ / SOLVE / Limit / CALC / °′″ / hyp / Pol / Rec / RanInt） */
+    /** 打开某个数值功能对话框（∫dx / d/dx / Σ / SOLVE / Limit / CALC / °′″ / hyp / Pol / Rec / RanInt）
+     *  批次 K3 起主键位不再走它（全部改就地括号调用），保留作为内部入口 */
     data class OpenFunc(val kind: FuncKind) : KeyAction
 
+    // ---- 批次 K3：就地括号调用（不弹二级面板）----
+    /** 在主行就地插入模板文本，光标回退 cursorBack 格 → 落进括号 / 空槽里 */
+    data class Template(val text: String, val cursorBack: Int) : KeyAction
+    /** hyp：插入 sinh()；光标还停在双曲调用口时重复按 → sinh → cosh → tanh 循环 */
+    data object HypCycle : KeyAction
+
     // ---- 批次 B ----
-    /** STO：存入变量（A–F / x / y / M） */
+    /** STO：存入变量（A–F / x / y / M）
+     *  批次 K3 起主键位改就地 sto(式,变量)，面板保留作为内部入口 */
     data object OpenSto : KeyAction
     /** CONST：科学常数表 */
     data object OpenConst : KeyAction
@@ -124,7 +132,7 @@ fun modeEntries(): List<ModeEntry> = listOf(
 fun utilityBar(mode: AngleMode): List<Key> = listOf(
     Key("", KeyKind.UTIL, KeyAction.Menu, icon = KeyIcon.MENU),
     Key("PRO", KeyKind.PRO, KeyAction.Pro, icon = KeyIcon.PRO),
-    Key("", KeyKind.UTIL, KeyAction.OpenFunc(FuncKind.SUMMATION), icon = KeyIcon.SIGMA),
+    Key("", KeyKind.UTIL, KeyAction.Template("sum(,,)", 3), icon = KeyIcon.SIGMA),
     Key("", KeyKind.UTIL, KeyAction.Settings, icon = KeyIcon.GEAR),
     Key("", KeyKind.UTIL, KeyAction.SignToggle, icon = KeyIcon.PLUSMINUS),
     Key("", KeyKind.UTIL, KeyAction.Photo, icon = KeyIcon.CAMERA),
@@ -146,16 +154,17 @@ fun keypadRows(): List<List<Key>> = listOf(
     ),
 
     // 第 3 排：CALC · ∫dx · x⁻¹ · logₓy（参照图：CALC 的 ALPHA 层是 =，∫dx 的 ALPHA 层是 ;）
+    // 批次 K3：CALC / SOLVE / ∫dx / d/dx / Σ 全部就地括号调用，不弹面板
     listOf(
-        Key("CALC", KeyKind.FUNC, KeyAction.OpenFunc(FuncKind.CALC),
-            shift = SubKey("SOLVE", KeyAction.OpenFunc(FuncKind.SOLVE)),
+        Key("CALC", KeyKind.FUNC, KeyAction.Template("calc()", 1),
+            shift = SubKey("SOLVE", KeyAction.Template("solve()", 1)),
             alpha = SubKey("=", ins("="))),
-        Key("∫dx", KeyKind.FUNC, KeyAction.OpenFunc(FuncKind.INTEGRAL),
-            shift = SubKey("d/dx", KeyAction.OpenFunc(FuncKind.DERIV)),
+        Key("∫dx", KeyKind.FUNC, KeyAction.Template("int(,,)", 3),
+            shift = SubKey("d/dx", KeyAction.Template("deriv(,)", 2)),
             alpha = SubKey(";", ins(";"))),
         Key("x\u207B\u00B9", KeyKind.FUNC, ins("\u207B\u00B9("), shift = SubKey("x!", ins("!"))),
         Key("log\u2093y", KeyKind.FUNC, ins("logb("),
-            shift = SubKey("Σ", KeyAction.OpenFunc(FuncKind.SUMMATION))),
+            shift = SubKey("Σ", KeyAction.Template("sum(,,)", 3))),
     ),
 
     // 第 4 排：分数 · 根号 · 幂 · 对数（参照图主字写 x/y；√x 的 ALPHA 层是 mod）
@@ -175,10 +184,10 @@ fun keypadRows(): List<List<Key>> = listOf(
         Key("(\u2212)", KeyKind.FUNC, KeyAction.SignToggle,
             shift = SubKey("∠", ins("\u2220")),
             alpha = SubKey("a", ins("A"))),
-        Key("\u00B0\u2032\u2033", KeyKind.FUNC, KeyAction.OpenFunc(FuncKind.DMS),
+        Key("\u00B0\u2032\u2033", KeyKind.FUNC, KeyAction.Template("dms(,,)", 3),
             shift = SubKey("FACT", ins("!")),
             alpha = SubKey("b", ins("B"))),
-        Key("hyp", KeyKind.FUNC, KeyAction.OpenFunc(FuncKind.HYPER),
+        Key("hyp", KeyKind.FUNC, KeyAction.HypCycle,
             shift = SubKey("|x|", ins("abs(")),
             alpha = SubKey("c", ins("C"))),
         Key("sin", KeyKind.FUNC, ins("sin("), shift = SubKey("sin\u207B\u00B9", ins("sin\u207B\u00B9(")),
@@ -192,7 +201,7 @@ fun keypadRows(): List<List<Key>> = listOf(
     // 第 6 排：RCL · ENG · ( · ) · S⇔D · M+（参照图：STO/CLRv · i/Cot · %/Cot⁻¹ · ,/x · x⇄y/y · M−/m）
     listOf(
         Key("RCL", KeyKind.MEM, KeyAction.Mrc,
-            shift = SubKey("STO", KeyAction.OpenSto),
+            shift = SubKey("STO", KeyAction.Template("sto(,)", 2)),
             alpha = SubKey("CLRv", KeyAction.ClrVars)),
         Key("ENG", KeyKind.MEM, KeyAction.EngToggle,
             shift = SubKey("i", ins("i")),
@@ -213,12 +222,12 @@ fun keypadRows(): List<List<Key>> = listOf(
 
     // 第 7 排：7 8 9 ⌫ AC（参照图：CONST · CONV/SI · Limit/∞ · (无) · CLR ALL）
     listOf(
-        Key("7", KeyKind.DIGIT, ins("7"), shift = SubKey("CONST", KeyAction.OpenConst)),
+        Key("7", KeyKind.DIGIT, ins("7"), shift = SubKey("CONST", KeyAction.Template("const()", 1))),
         Key("8", KeyKind.DIGIT, ins("8"),
-            shift = SubKey("CONV", KeyAction.OpenConv),
-            alpha = SubKey("SI", KeyAction.OpenSi)),
+            shift = SubKey("CONV", KeyAction.Template("conv(,,)", 3)),
+            alpha = SubKey("SI", KeyAction.Template("si(,)", 2))),
         Key("9", KeyKind.DIGIT, ins("9"),
-            shift = SubKey("Limit", KeyAction.OpenFunc(FuncKind.LIMIT)),
+            shift = SubKey("Limit", KeyAction.Template("lim(,)", 2)),
             alpha = SubKey("\u221E", ins("\u221E"))),
         Key("", KeyKind.DANGER, KeyAction.Del, icon = KeyIcon.BACKSPACE),
         Key("AC", KeyKind.DANGER, KeyAction.Ac, labelScale = 0.9f,
@@ -246,10 +255,10 @@ fun keypadRows(): List<List<Key>> = listOf(
         Key("2", KeyKind.DIGIT, ins("2"), shift = SubKey("CMPLX", KeyAction.GoScreen(Screen.CMPLX))),
         Key("3", KeyKind.DIGIT, ins("3"), shift = SubKey("DISTR", KeyAction.GoScreen(Screen.DISTR))),
         Key("+", KeyKind.OP, ins("+"),
-            shift = SubKey("Pol", KeyAction.OpenFunc(FuncKind.POL)),
+            shift = SubKey("Pol", KeyAction.Template("pol(,)", 2)),
             alpha = SubKey("Ceil", ins("ceil("))),
         Key("\u2212", KeyKind.OP, ins("\u2212"),
-            shift = SubKey("Rec", KeyAction.OpenFunc(FuncKind.REC)),
+            shift = SubKey("Rec", KeyAction.Template("rec(,)", 2)),
             alpha = SubKey("Floor", ins("floor("))),
     ),
 
@@ -260,7 +269,7 @@ fun keypadRows(): List<List<Key>> = listOf(
             alpha = SubKey("PASTE", KeyAction.PasteExpr)),
         Key(".", KeyKind.DIGIT, ins("."),
             shift = SubKey("Ran#", KeyAction.RandomInsert),
-            alpha = SubKey("RanInt", KeyAction.OpenFunc(FuncKind.RANINT))),
+            alpha = SubKey("RanInt", KeyAction.Template("ranint(,)", 2))),
         Key("Exp", KeyKind.FUNC, ins("\u00D710^"), labelScale = 0.8f,
             shift = SubKey("\u03C0", ins("\u03C0")),
             alpha = SubKey("e", ins("e"))),

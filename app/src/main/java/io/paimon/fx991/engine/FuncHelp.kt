@@ -38,6 +38,7 @@ object FuncHelp {
     const val CAT_GEOGEBRA = "自定义函数（GeoGebra 式）"
     const val CAT_FOURIER = "傅里叶级数（主行）"
     const val CAT_CPLXF = "复变函数（主行）"
+    const val CAT_INLINE = "就地调用（批次 K3，主行直写不弹面板）"
 
     @JvmField
     val ALL: List<FuncHelpEntry> = listOf(
@@ -100,7 +101,23 @@ object FuncHelp {
         FuncHelpEntry("变量 A–F", CAT_CONST, "A .. F", "STO 存入的变量，可在表达式里直接引用", "A", "A+B"),
         FuncHelpEntry("∠", CAT_CONST, "r∠θ", "极坐标运算符（可多个）：9∠60+5∠6 就是两个复数相加", "\u2220", "2"),
         FuncHelpEntry("∞", CAT_CONST, "∞", "正无穷符号（9 的 ALPHA 层；1÷∞→0，单独求值报数学错误）", "\u221E", "1\u00F7\u221E"),
-        FuncHelpEntry("Σ", CAT_CONST, "Σ(f(x), x, a, b)", "求和（数值功能对话框）", "\u03A3", "1"),
+        FuncHelpEntry("Σ", CAT_CONST, "sum(f(x), a, b)", "求和：主行写 sum(式, 下界, 上界)，屏显 Σ", "sum(", "sum(x,1,10)"),
+
+        // ---- 批次 K3：就地括号调用（主行直写，不弹面板）----
+        FuncHelpEntry("solve", CAT_INLINE, "solve(方程)", "方程求根：solve(2x+3=7) / solve(x²-3x+2=0)；不带等号按 f(x)=0", "solve(", "1+1"),
+        FuncHelpEntry("sto", CAT_INLINE, "sto(式, 变量)", "就地变量赋值：sto(5+3, A)；变量 A–F / x / y / M", "sto(", "1+1"),
+        FuncHelpEntry("int", CAT_INLINE, "int(f(x), 下, 上)", "定积分（二维模板屏显 ∫_下^上 式 dx）：int(x^2, 0, 1)", "int(", "int(x^2,0,1)"),
+        FuncHelpEntry("deriv", CAT_INLINE, "deriv(f(x), x)", "数值导数（屏显 d/dx）：deriv(sin(x), 1)", "deriv(", "deriv(sin(x),1)"),
+        FuncHelpEntry("sum2", CAT_INLINE, "sum(f(x), a, b)", "求和（屏显 Σ）：sum(x, 1, 10) = 55", "sum(", "sum(x,1,10)"),
+        FuncHelpEntry("lim", CAT_INLINE, "lim(f(x), x0)", "极限：lim(sin(x)/x, 0)；左右不等会明说", "lim(", "lim(sin(x)/x,0)"),
+        FuncHelpEntry("calc", CAT_INLINE, "calc(式)", "代入求值：按当前 x / y / 变量值算表达式", "calc(", "calc(1+1)"),
+        FuncHelpEntry("dms", CAT_INLINE, "dms(度, 分, 秒)", "度分秒 → 十进制度：dms(1, 30, 0) = 1.5", "dms(", "dms(1,30,0)"),
+        FuncHelpEntry("pol", CAT_INLINE, "pol(x, y)", "直角→极坐标：附注给 r / θ，S⇔D 切 r∠θ 显示", "pol(", "pol(1,1)"),
+        FuncHelpEntry("rec", CAT_INLINE, "rec(r, θ)", "极坐标→直角：结果显示 x + yi", "rec(", "rec(2,60)"),
+        FuncHelpEntry("ranint", CAT_INLINE, "ranint(a, b)", "[a,b] 均匀随机整数", "ranint(", "ranint(1,6)"),
+        FuncHelpEntry("const", CAT_INLINE, "const(符号)", "科学常数就地引用：const(g) / const(c) / const(NA)", "const(", "const(g)"),
+        FuncHelpEntry("conv", CAT_INLINE, "conv(值, 从, 到)", "单位换算：conv(5, km, mi)；温度写作 C / F / K", "conv(", "conv(5,km,mi)"),
+        FuncHelpEntry("si", CAT_INLINE, "si(值, 前缀)", "SI 前缀读数：si(1500, k) = 1.5（即 1.5k）", "si(", "si(1500,k)"),
 
         // ---- 统一输入面：矩阵 / 向量（主行可直接用，无需切模式）----
         FuncHelpEntry("MatA", CAT_UNIFIED, "MatA .. MatD", "矩阵变量；在 MATRIX 界面定义数据，主行可直接参与运算", "MatA", "MatA"),

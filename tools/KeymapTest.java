@@ -38,10 +38,14 @@ public class KeymapTest {
     static final String SD = "S⇔D";    // S⇔D
     static final String DMS = "°′″";   // °′″
 
-    /** 动作描述子：ins:文本 / func:KIND / screen:NAME / 单例类名 */
+    /** 动作描述子：ins:文本 / tpl:文本@回退 / func:KIND / screen:NAME / 单例类名 */
     static String act(KeyAction a) {
         if (a == null) return "";
         if (a instanceof KeyAction.Insert) return "ins:" + ((KeyAction.Insert) a).getText();
+        if (a instanceof KeyAction.Template) {
+            KeyAction.Template t = (KeyAction.Template) a;
+            return "tpl:" + t.getText() + "@" + t.getCursorBack();
+        }
         if (a instanceof KeyAction.OpenFunc) return "func:" + ((KeyAction.OpenFunc) a).getKind().name();
         if (a instanceof KeyAction.GoScreen) return "screen:" + ((KeyAction.GoScreen) a).getScreen().name();
         return a.getClass().getSimpleName();
@@ -114,11 +118,11 @@ public class KeymapTest {
         key(rows, 0, 3, "MODE", "Mode", "", "", "", "");
         key(rows, 0, 4, "2nd", "Shift", "", "", "", "");
 
-        System.out.println("-- 第 3 排：CALC · ∫dx · x⁻¹ · logₓy --");
-        key(rows, 1, 0, "CALC", "func:CALC", "SOLVE", "func:SOLVE", "=", "ins:=");
-        key(rows, 1, 1, INTG, "func:INTEGRAL", "d/dx", "func:DERIV", ";", "ins:;");
+        System.out.println("-- 第 3 排：CALC · ∫dx · x⁻¹ · logₓy（批次 K3：全部就地括号调用）--");
+        key(rows, 1, 0, "CALC", "tpl:calc()@1", "SOLVE", "tpl:solve()@1", "=", "ins:=");
+        key(rows, 1, 1, INTG, "tpl:int(,,)@3", "d/dx", "tpl:deriv(,)@2", ";", "ins:;");
         key(rows, 1, 2, "x" + RECIP, "ins:" + RECIP + "(", "x!", "ins:!", "", "");
-        key(rows, 1, 3, LOGXY, "ins:logb(", "Σ", "func:SUMMATION", "", "");
+        key(rows, 1, 3, LOGXY, "ins:logb(", "Σ", "tpl:sum(,,)@3", "", "");
 
         System.out.println("-- 第 4 排：x/y · √x · x² · xʸ · log · ln --");
         key(rows, 2, 0, "x/y", "Fraction", "ab/c", "FracFormat", "", "");
@@ -130,14 +134,14 @@ public class KeymapTest {
 
         System.out.println("-- 第 5 排：(−) · °′″ · hyp · sin · cos · tan --");
         key(rows, 3, 0, "(" + MINUS + ")", "SignToggle", ANG, "ins:" + ANG, "a", "ins:A");
-        key(rows, 3, 1, DMS, "func:DMS", "FACT", "ins:!", "b", "ins:B");
-        key(rows, 3, 2, "hyp", "func:HYPER", "|x|", "ins:abs(", "c", "ins:C");
+        key(rows, 3, 1, DMS, "tpl:dms(,,)@3", "FACT", "ins:!", "b", "ins:B");
+        key(rows, 3, 2, "hyp", "HypCycle", "|x|", "ins:abs(", "c", "ins:C");
         key(rows, 3, 3, "sin", "ins:sin(", "sin" + RECIP, "ins:sin" + RECIP + "(", "d", "ins:D");
         key(rows, 3, 4, "cos", "ins:cos(", "cos" + RECIP, "ins:cos" + RECIP + "(", "e", "ins:E");
         key(rows, 3, 5, "tan", "ins:tan(", "tan" + RECIP, "ins:tan" + RECIP + "(", "f", "ins:F");
 
         System.out.println("-- 第 6 排：RCL · ENG · ( · ) · S⇔D · M+ --");
-        key(rows, 4, 0, "RCL", "Mrc", "STO", "OpenSto", "CLRv", "ClrVars");
+        key(rows, 4, 0, "RCL", "Mrc", "STO", "tpl:sto(,)@2", "CLRv", "ClrVars");
         key(rows, 4, 1, "ENG", "EngToggle", "i", "ins:i", "Cot", "ins:cot(");
         key(rows, 4, 2, "(", "ins:(", "%", "ins:%", "Cot" + RECIP, "ins:acot(");
         key(rows, 4, 3, ")", "ins:)", ",", "ins:,", "x", "ins:x");
@@ -145,9 +149,9 @@ public class KeymapTest {
         key(rows, 4, 5, "M+", "MPlus", "M" + MINUS, "MMinus", "m", "ins:M");
 
         System.out.println("-- 第 7 排：7 8 9 ⌫ AC --");
-        key(rows, 5, 0, "7", "ins:7", "CONST", "OpenConst", "", "");
-        key(rows, 5, 1, "8", "ins:8", "CONV", "OpenConv", "SI", "OpenSi");
-        key(rows, 5, 2, "9", "ins:9", "Limit", "func:LIMIT", INF, "ins:" + INF);
+        key(rows, 5, 0, "7", "ins:7", "CONST", "tpl:const()@1", "", "");
+        key(rows, 5, 1, "8", "ins:8", "CONV", "tpl:conv(,,)@3", "SI", "tpl:si(,)@2");
+        key(rows, 5, 2, "9", "ins:9", "Limit", "tpl:lim(,)@2", INF, "ins:" + INF);
         key(rows, 5, 3, "", "Del", "", "", "", "");
         key(rows, 5, 4, "AC", "Ac", "CLR ALL", "ClrAll", "", "");
 
@@ -162,12 +166,12 @@ public class KeymapTest {
         key(rows, 7, 0, "1", "ins:1", "STAT", "screen:STAT", "", "");
         key(rows, 7, 1, "2", "ins:2", "CMPLX", "screen:CMPLX", "", "");
         key(rows, 7, 2, "3", "ins:3", "DISTR", "screen:DISTR", "", "");
-        key(rows, 7, 3, "+", "ins:+", "Pol", "func:POL", "Ceil", "ins:ceil(");
-        key(rows, 7, 4, MINUS, "ins:" + MINUS, "Rec", "func:REC", "Floor", "ins:floor(");
+        key(rows, 7, 3, "+", "ins:+", "Pol", "tpl:pol(,)@2", "Ceil", "ins:ceil(");
+        key(rows, 7, 4, MINUS, "ins:" + MINUS, "Rec", "tpl:rec(,)@2", "Floor", "ins:floor(");
 
         System.out.println("-- 第 10 排：0 . Exp Ans = --");
         key(rows, 8, 0, "0", "ins:0", "COPY", "CopyExpr", "PASTE", "PasteExpr");
-        key(rows, 8, 1, ".", "ins:.", "Ran#", "RandomInsert", "RanInt", "func:RANINT");
+        key(rows, 8, 1, ".", "ins:.", "Ran#", "RandomInsert", "RanInt", "tpl:ranint(,)@2");
         key(rows, 8, 2, "Exp", "ins:" + MUL + "10^", PI, "ins:" + PI, "e", "ins:e");
         key(rows, 8, 3, "Ans", "ins:Ans", "", "", "PreAns", "ins:PreAns");
         key(rows, 8, 4, "=", "Equals", "History", "OpenHistory", "", "");

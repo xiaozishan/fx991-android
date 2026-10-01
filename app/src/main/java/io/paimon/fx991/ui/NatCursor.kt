@@ -27,6 +27,9 @@ object CursorModel {
         "root(", "npr(", "ncr(", "exp(",
         // 批次 K4
         "acot(", "cot(", "ceil(", "floor(", "gcd(", "lcm(", "mod(",
+        // 批次 K3：就地括号调用模板（长的优先匹配；ranint( 先于 int(）
+        "ranint(", "deriv(", "solve(", "const(", "conv(", "calc(",
+        "dms(", "int(", "sum(", "lim(", "pol(", "rec(", "sto(", "si(",
         "\u221A(",
         "sin\u207B\u00B9", "cos\u207B\u00B9", "tan\u207B\u00B9",
         "\u00D710^", "PreAns", "10^", "Ans", "\u207B\u00B9",
@@ -146,6 +149,14 @@ private fun placeCursor(node: Nat, cur: Int): Nat = when (node) {
         else -> Nat.Row(listOf(node, Nat.Cursor))
     }
 
+    // 批次 K3：光标能落进 ∫ 模板的被积式 / 下限 / 上限三个槽
+    is Nat.Integ -> when {
+        inSpan(node.body, cur) -> Nat.Integ(placeCursor(node.body, cur), node.lo, node.hi)
+        inSpan(node.lo, cur) -> Nat.Integ(node.body, placeCursor(node.lo, cur), node.hi)
+        inSpan(node.hi, cur) -> Nat.Integ(node.body, node.lo, placeCursor(node.hi, cur))
+        else -> Nat.Row(listOf(node, Nat.Cursor))
+    }
+
     is Nat.Cursor -> node
 }
 
@@ -175,6 +186,9 @@ fun natCursorPath(n: Nat): String {
         is Nat.Frac -> walk(node.n, "$path/num") ?: walk(node.d, "$path/den")
         is Nat.Sqrt -> walk(node.a, "$path/sqrt")
         is Nat.Sup -> walk(node.base, "$path/base") ?: walk(node.exp, "$path/exp")
+        is Nat.Integ -> walk(node.body, "$path/body")
+            ?: walk(node.lo, "$path/lo")
+            ?: walk(node.hi, "$path/hi")
     }
     return walk(n, "root") ?: ""
 }
@@ -214,6 +228,8 @@ fun natLinear(n: Nat): String = when (n) {
     is Nat.Frac -> argText(n.n, forSup = false) + "\u00F7" + argText(n.d, forSup = false)
     is Nat.Sqrt -> if (isGroupNode(n.a)) "\u221A" + natLinear(n.a) else "\u221A(" + natLinear(n.a) + ")"
     is Nat.Sup -> natLinear(n.base) + "^" + argText(n.exp, forSup = true)
+    // 批次 K3：积分模板回写为 int(式,下,上)（槽位内容原样线性化，空槽即空）
+    is Nat.Integ -> "int(" + natLinear(n.body) + "," + natLinear(n.lo) + "," + natLinear(n.hi) + ")"
 }
 
 /** 表达式字符串 → 节点树 → 线性文本（规范化后的同义线性式） */

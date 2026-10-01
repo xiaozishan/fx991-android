@@ -18,6 +18,7 @@ import io.paimon.fx991.engine.CalcValue
 import io.paimon.fx991.engine.ComplexRect
 import io.paimon.fx991.engine.EquationSolver
 import io.paimon.fx991.engine.FourierOps
+import io.paimon.fx991.engine.InlineFuncs
 import io.paimon.fx991.engine.MatrixStore
 import io.paimon.fx991.engine.NumberNotation
 import io.paimon.fx991.engine.NumericError
@@ -356,6 +357,9 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
             // 批次 E：拍照键直达真界面（不再是说明页）
             KeyAction.Photo -> goto(Screen.PHOTO_SOLVE)
             is KeyAction.OpenFunc -> openFunc(action.kind)
+            // 批次 K3：就地括号调用（不弹面板）
+            is KeyAction.Template -> insertTemplate(action.text, action.cursorBack)
+            KeyAction.HypCycle -> insertHyperCycle()
             KeyAction.OpenSto -> {
                 storeMessage = ""
                 openOverlay(Overlay.STO)
@@ -399,6 +403,30 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
         solutionItems = emptyList()
         resultNote = ""
         refreshPreview()
+    }
+
+    /** 批次 K3：就地括号调用 —— 插入模板文本，光标回退 back 格落进括号 / 空槽里 */
+    private fun insertTemplate(text: String, back: Int) {
+        insert(text)
+        cursor = (cursor - back).coerceIn(0, expression.length)
+    }
+
+    /** 批次 K3：hyp —— 插入 sinh()；光标还停在双曲调用口时重复按 → sinh → cosh → tanh 循环 */
+    private fun insertHyperCycle() {
+        val names = listOf("sinh", "cosh", "tanh")
+        names.forEachIndexed { ix, nm ->
+            val s = cursor - 1 - nm.length
+            if (s >= 0 && expression.regionMatches(s, nm, 0, nm.length) &&
+                expression.getOrNull(cursor - 1) == '(' && expression.getOrNull(cursor) == ')'
+            ) {
+                val next = names[(ix + 1) % names.size]
+                expression = expression.substring(0, s) + next + expression.substring(cursor - 1)
+                cursor = s + next.length + 1
+                refreshPreview()
+                return
+            }
+        }
+        insertTemplate("sinh()", 1)
     }
 
     private fun clearAll() {
@@ -528,6 +556,15 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
         solutionItems = emptyList()
         resultNote = ""
         try {
+            // 批次 K3：就地调用拦截 —— solve(方程) 出求解报告 / sto(式,变量) 写寄存器，都不是纯求值
+            InlineFuncs.unwrapSolve(src)?.let { inner ->
+                runEquation(inner)
+                return
+            }
+            InlineFuncs.parseSto(src)?.let { (ex, name) ->
+                runSto(src, ex, name)
+                return
+            }
             // 批次 G：GeoGebra 式函数定义优先于方程判定（f(x)=x^2 定义；已定义时同形按方程解）
             val defined = UserFunctions.tryDefine(src)
             if (defined != null) {
@@ -644,6 +681,40 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
         justEvaluated = false
     }
 
+    /** 批次 K3：sto(式, 变量) —— 就地变量赋值（原 STO 面板的就地形态） */
+    private fun runSto(src: String, exprSrc: String, varName: String) {
+        try {
+            val v = Unified.evaluate(
+                exprSrc, angleMode, ans, memValue(), lastExact, preAns, varsMap(), matrixStore, vectorStore,
+            )
+            val cx = Unified.asComplex(v) ?: throw NumericError("STO 只能存数值")
+            if (abs(cx.im.toDouble()) > 1e-12) throw NumericError("复数不能存入变量")
+            val d = cx.re.toDouble()
+            val msg = if (varName == "M") {
+                memory = d
+                memorySet = true
+                "已存入 M = " + formatNumber(d)
+            } else {
+                registers.store(varName, d)
+            }
+            variables = registers.snapshot()
+            presentValue(src, v)
+            resultNote = msg
+        } catch (e: CalcSyntaxError) {
+            syntaxError()
+        } catch (e: NumericError) {
+            resultText = e.message ?: "\u6570\u5B66\u9519\u8BEF"
+            previewText = ""
+            isError = true
+            solutionItems = emptyList()
+            justEvaluated = false
+        } catch (_: CalcMathError) {
+            mathError()
+        } catch (_: Exception) {
+            mathError()
+        }
+    }
+
     /** 普通求值结果：复数走复数轨，矩阵 / 向量直接上屏 */
     private fun presentValue(src: String, v: CalcValue) {
         when (v) {
@@ -738,15 +809,22 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
         }
         if (src.contains('=')) {
             // 批次 G：方程即输即解（无歧义时预览直接给解，按 = 确认）
+            // 批次 K3：solve(方程) 外壳先剥掉再预览
             previewText = try {
-                if (EquationSolver.unknowns(src).isEmpty()) ""
+                val eqSrc = InlineFuncs.unwrapSolve(src) ?: src
+                if (EquationSolver.unknowns(eqSrc).isEmpty()) ""
                 else {
-                    val r = EquationSolver.solve(src, angleMode)
+                    val r = EquationSolver.solve(eqSrc, angleMode)
                     if (r.kind == SolveKind.ERROR) "" else r.text + "（按 = 确认）"
                 }
             } catch (_: Exception) {
                 ""
             }
+            return
+        }
+        // 批次 K3：重数值调用（自适应积分 / 导数 / 求和 / 极限）不做实时预览，避免每次击键都跑一轮
+        if (Regex("(int|deriv|sum|lim)\\s*\\(").containsMatchIn(src)) {
+            previewText = "按 = 计算"
             return
         }
         previewText = try {

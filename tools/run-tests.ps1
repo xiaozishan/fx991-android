@@ -1,6 +1,6 @@
 # 跑全部回归测试（EngineTest 70 条 + v2 精确分数 25 条 + 自然书写布局 12 条 + 微分方程 18 条
 # + 批次 A 数值算法 91 条 + 批次 B 工具 119 条 + 批次 C 六大子系统 + Insets 避让布局
-# + 自然书写堆叠显示护栏 16 条 + 批次 D 四新模式）
+# + 自然书写堆叠显示护栏 16 条 + 批次 D 四新模式 + 批次 K3 图片格式兼容 + 批次 K3 就地括号调用）
 # 用法：powershell -File tools\run-tests.ps1
 $ErrorActionPreference = "Stop"
 $env:JAVA_HOME = "D:\applications\jdk-21"
@@ -31,7 +31,9 @@ $suites = @(
     @{ name = "GeoCplxFourierTest"; file = "tools\GeoCplxFourierTest.java"; out = "$env:TEMP\fx991-t14" },
     @{ name = "CursorTest";  file = "tools\CursorTest.java";  out = "$env:TEMP\fx991-t15" },
     @{ name = "KeymapTest";  file = "tools\KeymapTest.java";  out = "$env:TEMP\fx991-t16" },
-    @{ name = "UpdateCheckTest"; file = "tools\UpdateCheckTest.java"; out = "$env:TEMP\fx991-t17" }
+    @{ name = "UpdateCheckTest"; file = "tools\UpdateCheckTest.java"; out = "$env:TEMP\fx991-t17" },
+    @{ name = "PhotoFormatsTest"; file = "tools\PhotoFormatsTest.java"; out = "$env:TEMP\fx991-t18" },
+    @{ name = "InlineFuncTest"; file = "tools\InlineFuncTest.java"; out = "$env:TEMP\fx991-t19" }
 )
 
 $failed = 0

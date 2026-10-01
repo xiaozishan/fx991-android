@@ -2,6 +2,7 @@ package io.paimon.fx991.ui
 
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -168,9 +169,13 @@ fun PhotoSolveScreen(vm: CalcViewModel, onBack: () -> Unit) {
         }
     }
 
-    // 相册：GetContent 兼容写法（不申请任何存储权限，走系统选择器）
+    // 相册（批次 K3）：改用系统 Photo Picker（PickVisualMedia）。
+    // 老的 GetContent(ACTION_GET_CONTENT) 在部分机型上列不出 HEIC；
+    // Photo Picker 原生覆盖 HEIC/HEIF/AVIF，无 Photo Picker 的老设备
+    // 由 androidx 自动回退 ACTION_OPEN_DOCUMENT（image/* 同样匹配 HEIC）。
+    // 不申请任何存储权限。
     val galleryLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
+        ActivityResultContracts.PickVisualMedia()
     ) { uri -> if (uri != null) processUri(uri) }
 
     // 相机：TakePicture = MediaStore.ACTION_IMAGE_CAPTURE + FileProvider，不申请 CAMERA 权限
@@ -310,7 +315,11 @@ fun PhotoSolveScreen(vm: CalcViewModel, onBack: () -> Unit) {
                         }
                     }
                     Button(
-                        onClick = { galleryLauncher.launch("image/*") },
+                        onClick = {
+                            galleryLauncher.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                            )
+                        },
                         enabled = phase != PhotoPhase.BUSY,
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(

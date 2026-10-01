@@ -43,6 +43,9 @@ object SciConstants {
 
     @JvmField
     val COUNT: Int = ALL.size
+
+    /** 批次 K3：按符号查常数（主行 const( 就地引用用）；找不到返回 null */
+    fun find(symbol: String): SciConstant? = ALL.firstOrNull { it.symbol == symbol }
 }
 
 // ---------------------------------------------------------------------------
@@ -163,6 +166,29 @@ object UnitConvert {
         "K" -> c + 273.15
         else -> throw NumericError("未知温度单位 $symbol")
     }
+
+    // -------------------------------------------------------------------
+    // 批次 K3：主行就地换算 conv(值, 源单位, 目标单位) 的符号查找
+    //   · 温度键面打不出 °，接受简写 C / F / K
+    //   · gal(UK) 带括号打不出，主行只到 gal（美制）；英制走面板等价路径已并入说明
+    // -------------------------------------------------------------------
+
+    /** 温度单位的可打字符号 → 内部符号 */
+    private fun tempAlias(symbol: String): String = when (symbol) {
+        "C", "°C" -> "°C"
+        "F", "°F" -> "°F"
+        "K" -> "K"
+        else -> symbol
+    }
+
+    /** 一个单位符号属于哪个类别 / 单位；温度接受简写。找不到返回 null */
+    fun findUnit(symbol: String): Pair<UnitCategory, UnitDef>? {
+        val s = tempAlias(symbol)
+        for (cat in CATEGORIES) {
+            cat.units.firstOrNull { it.symbol == s }?.let { return cat to it }
+        }
+        return null
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -207,6 +233,10 @@ object SiPrefixes {
         require(fromIndex in ALL.indices && toIndex in ALL.indices) { "SI 前缀下标越界" }
         return value * ALL[fromIndex].factor / ALL[toIndex].factor
     }
+
+    /** 批次 K3：按符号查前缀（主行 si( 就地换算用）；空符号与未知名返回 null */
+    fun find(symbol: String): SiPrefix? =
+        if (symbol.isEmpty()) null else ALL.firstOrNull { it.symbol == symbol }
 }
 
 // ---------------------------------------------------------------------------
