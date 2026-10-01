@@ -12,8 +12,8 @@ android {
         applicationId = "io.paimon.fx991"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.11.0-inline"
+        versionCode = 112
+        versionName = "1.11.1"
 
         ndk {
             // 批次 F 起 ML Kit 带进 4 个 ABI 的 .so（合计约 41 MB），全打进去 APK 会胀到 53 MB。
@@ -27,9 +27,30 @@ android {
         }
     }
 
+    signingConfigs {
+        create("release") {
+            val propsFile = rootProject.file("keystore.properties")
+            if (propsFile.exists()) {
+                // 手写解析 key=value（密码不含 = 号；避免在 Kotlin DSL 里引 java.util 的麻烦）
+                val props = propsFile.readLines().mapNotNull {
+                    val i = it.indexOf('=')
+                    if (i > 0) it.substring(0, i).trim() to it.substring(i + 1).trim() else null
+                }.toMap()
+                storeFile = rootProject.file(props["storeFile"]!!)
+                storePassword = props["storePassword"]!!
+                keyAlias = props["keyAlias"]!!
+                keyPassword = props["keyPassword"]!!
+            }
+        }
+    }
+
     buildTypes {
         release {
+            // 2026-10-01：debug 包带 debuggable=true，ColorOS 等新系统从文件管理器安装会拦。
+            // release 变体：非 debuggable + 专用 release 密钥签名（密钥在 keystore.properties，gitignore 挡住）。
             isMinifyEnabled = false
+            isDebuggable = false
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 

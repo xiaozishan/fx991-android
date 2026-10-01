@@ -7,3 +7,8 @@ local.properties
 *.apk
 *.iml
 .idea/
+
+# fx991 release 签名密钥（2026-10-01）
+keystore.properties
+tools/*.keystore
+

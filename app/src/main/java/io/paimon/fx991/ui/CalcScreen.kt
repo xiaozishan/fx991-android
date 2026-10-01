@@ -72,7 +72,7 @@ import io.paimon.fx991.engine.SiPrefixes
 import io.paimon.fx991.engine.UnitConvert
 import io.paimon.fx991.engine.label
 
-const val APP_VERSION = "1.11.0-inline"
+const val APP_VERSION = "1.11.1"
 const val APP_REPO = "https://github.com/xiaozishan/workspace"
 
 @Composable
