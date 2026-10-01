@@ -12,8 +12,8 @@ android {
         applicationId = "io.paimon.fx991"
         minSdk = 26
         targetSdk = 36
-        versionCode = 112
-        versionName = "1.11.1"
+        versionCode = 113
+        versionName = "1.11.2"
 
         ndk {
             // 批次 F 起 ML Kit 带进 4 个 ABI 的 .so（合计约 41 MB），全打进去 APK 会胀到 53 MB。
@@ -41,10 +41,19 @@ android {
                 keyAlias = props["keyAlias"]!!
                 keyPassword = props["keyPassword"]!!
             }
+            // ColorOS 等安装器只认 v1（JAR）签名；v2/v3 一并全开（2026-10-01：缺 v1 报「没有签名文件」装不上）
+            enableV1Signing = true
+            enableV2Signing = true
+            enableV3Signing = true
         }
     }
 
     buildTypes {
+        debug {
+            // ColorOS 拦 debuggable=true 的包；debug 变体保留 debug 密钥签名（天然带 v1+v2+v3，
+            // 你手机 v1.6~v1.10 全装上了就是证据），只把 debuggable 关掉（2026-10-01 实测 release 自定义签名只出 v2/v3，ColorOS 报「没有签名文件」）
+            isDebuggable = false
+        }
         release {
             // 2026-10-01：debug 包带 debuggable=true，ColorOS 等新系统从文件管理器安装会拦。
             // release 变体：非 debuggable + 专用 release 密钥签名（密钥在 keystore.properties，gitignore 挡住）。
