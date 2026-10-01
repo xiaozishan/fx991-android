@@ -51,7 +51,7 @@ sealed interface Nat {
 }
 
 internal enum class DT {
-    NUM, IDENT, PLUS, MINUS, MUL, DIV, POW, FACT, PCT, SQ2, CUBE, RECIP, SUP, LP, RP, SQRT, COMMA, ANGLE, EQ, SEMI, DOT, END
+    NUM, IDENT, PLUS, MINUS, MUL, DIV, POW, FACT, PCT, SQ2, CUBE, RECIP, SUP, LP, RP, SQRT, COMMA, ANGLE, EQ, SEMI, DOT, PM, END
 }
 
 internal class DTok(val t: DT, val s: String, val start: Int = -1, val end: Int = -1)
@@ -132,6 +132,9 @@ internal fun dlex(src: String): List<DTok> {
             c == '=' -> { tok(DT.EQ, "=", i, i + 1); i++ }
             c == ';' -> { tok(DT.SEMI, ";", i, i + 1); i++ }
             c == '\u00B7' -> { tok(DT.DOT, "\u00B7", i, i + 1); i++ }
+            // 批次 K3-symbolic：方程解里的 ±（如 x = ±i / −1 ± 2i）—— 以前被词法静默丢掉，
+            // 结果行渲染成 "x=i" / "−12i"（误导），这里作为行内符号画出来
+            c == '\u00B1' -> { tok(DT.PM, "\u00B1", i, i + 1); i++ }
             c == '\u2220' -> { tok(DT.ANGLE, "\u2220", i, i + 1); i++ }
             // 批次 G：导数撇号 f'(x) 在自然书写里原样画出
             c == '\'' || c == '\u2032' -> { tok(DT.IDENT, "'", i, i + 1); i++ }
@@ -197,6 +200,7 @@ internal class NatParser(private val ts: List<DTok>) {
                 DT.EQ -> take(DT.EQ)!!.let { Nat.Sym("=").sp(it.start, it.end) }
                 DT.SEMI -> take(DT.SEMI)!!.let { Nat.Sym(";").sp(it.start, it.end) }
                 DT.DOT -> take(DT.DOT)!!.let { Nat.Sym("\u00B7").sp(it.start, it.end) }
+                DT.PM -> take(DT.PM)!!.let { Nat.Sym("\u00B1").sp(it.start, it.end) }
                 else -> null
             } ?: break
             parts.add(op)

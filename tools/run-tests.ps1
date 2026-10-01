@@ -33,7 +33,8 @@ $suites = @(
     @{ name = "KeymapTest";  file = "tools\KeymapTest.java";  out = "$env:TEMP\fx991-t16" },
     @{ name = "UpdateCheckTest"; file = "tools\UpdateCheckTest.java"; out = "$env:TEMP\fx991-t17" },
     @{ name = "PhotoFormatsTest"; file = "tools\PhotoFormatsTest.java"; out = "$env:TEMP\fx991-t18" },
-    @{ name = "InlineFuncTest"; file = "tools\InlineFuncTest.java"; out = "$env:TEMP\fx991-t19" }
+    @{ name = "InlineFuncTest"; file = "tools\InlineFuncTest.java"; out = "$env:TEMP\fx991-t19" },
+    @{ name = "K3SymbolicTest"; file = "tools\K3SymbolicTest.java"; out = "$env:TEMP\fx991-t20" }
 )
 
 $failed = 0

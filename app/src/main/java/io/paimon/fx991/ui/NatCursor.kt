@@ -57,6 +57,121 @@ object CursorModel {
         return p + 1
     }
 
+    // -------------------------------------------------------------------
+    // 批次 K3-symbolic：方向键上下 = 二维结构内的垂直光标移动（不再是历史）
+    //   · 分数：分母 ↔ 分子        · 上标：指数 ↔ 基线（底数）
+    //   · 根号：内外（√ 内按 ↑ 出到根号后；根号后按 ↓ 回到 √ 内）
+    //   · ∫ 模板：被积式 ↑→上限 / ↓→下限；上限 ↓→下限；下限 ↑→上限
+    //   · 相对偏移在槽位间等距映射（分子第 2 列 ↓ 到分母第 2 列），超长钳到槽尾
+    //   · 光标不在任何二维结构里时：↑ = 到表达式开头，↓ = 到末尾
+    //   · 光标在二维结构里但该方向没有去处（如已在分子再按 ↑）→ 原地不动
+    // -------------------------------------------------------------------
+
+    /** 上移一格（二维结构内向「上」走） */
+    fun moveUp(expr: String, pos: Int): Int = moveVertical(expr, pos, up = true)
+
+    /** 下移一格（二维结构内向「下」走） */
+    fun moveDown(expr: String, pos: Int): Int = moveVertical(expr, pos, up = false)
+
+    private fun moveVertical(expr: String, pos: Int, up: Boolean): Int {
+        val p = clamp(expr, pos)
+        if (expr.isEmpty()) return 0
+        val root = try {
+            buildNat(expr)
+        } catch (_: Exception) {
+            return if (up) 0 else expr.length     // 解析不了就退化为首/尾
+        }
+        verticalTarget(root, p, up)?.let { return it }
+        // 在二维结构里但该方向没去处 → 原地；纯线性表达式 → 首/尾
+        return if (insideStructure(root, p)) p else if (up) 0 else expr.length
+    }
+
+    /** 槽位间等距映射：从 from 槽里的相对列 → to 槽里同列（超长钳到槽尾） */
+    private fun mapSlot(from: Nat, to: Nat, cur: Int): Int? {
+        if (to.srcStart < 0 || to.srcEnd < to.srcStart) return null
+        val len = to.srcEnd - to.srcStart
+        val rel = if (from.srcStart >= 0) cur - from.srcStart else 0
+        return to.srcStart + rel.coerceIn(0, len)
+    }
+
+    /**
+     * 找垂直移动的目标源码偏移：最深优先（嵌套结构先在内层走），
+     * 内层没有可走方向才轮到本层。找不到返回 null。
+     */
+    private fun verticalTarget(node: Nat, cur: Int, up: Boolean): Int? {
+        // 1) 先看子结构（最深优先）
+        when (node) {
+            is Nat.Row -> for (c in node.items) {
+                if (inSpan(c, cur)) verticalTarget(c, cur, up)?.let { return it }
+            }
+            is Nat.Frac -> {
+                if (inSpan(node.n, cur)) verticalTarget(node.n, cur, up)?.let { return it }
+                if (inSpan(node.d, cur)) verticalTarget(node.d, cur, up)?.let { return it }
+            }
+            is Nat.Sqrt -> if (inSpan(node.a, cur)) {
+                verticalTarget(node.a, cur, up)?.let { return it }
+            }
+            is Nat.Sup -> {
+                if (inSpan(node.base, cur)) verticalTarget(node.base, cur, up)?.let { return it }
+                if (inSpan(node.exp, cur)) verticalTarget(node.exp, cur, up)?.let { return it }
+            }
+            is Nat.Integ -> {
+                if (inSpan(node.body, cur)) verticalTarget(node.body, cur, up)?.let { return it }
+                if (inSpan(node.lo, cur)) verticalTarget(node.lo, cur, up)?.let { return it }
+                if (inSpan(node.hi, cur)) verticalTarget(node.hi, cur, up)?.let { return it }
+            }
+            else -> {}
+        }
+        // 2) 本层映射
+        return when (node) {
+            is Nat.Frac -> when {
+                !up && inSpan(node.n, cur) -> mapSlot(node.n, node.d, cur)
+                up && inSpan(node.d, cur) -> mapSlot(node.d, node.n, cur)
+                else -> null
+            }
+            is Nat.Sup -> when {
+                up && inSpan(node.base, cur) -> mapSlot(node.base, node.exp, cur)
+                !up && inSpan(node.exp, cur) -> mapSlot(node.exp, node.base, cur)
+                else -> null
+            }
+            is Nat.Sqrt -> when {
+                // √ 内 ↑ → 出到根号后；根号后 ↓ → 回到 √ 内（根号内容末尾，闭括号之前）
+                up && inSpan(node.a, cur) -> if (node.srcEnd >= 0) node.srcEnd else null
+                !up && node.srcEnd == cur && inSpan(node, cur) -> innerEnd(node.a).takeIf { it >= 0 }
+                else -> null
+            }
+            is Nat.Integ -> when {
+                up && inSpan(node.body, cur) -> mapSlot(node.body, node.hi, cur)
+                !up && inSpan(node.body, cur) -> mapSlot(node.body, node.lo, cur)
+                up && inSpan(node.lo, cur) -> mapSlot(node.lo, node.hi, cur)
+                !up && inSpan(node.hi, cur) -> mapSlot(node.hi, node.lo, cur)
+                else -> null
+            }
+            else -> null
+        }
+    }
+
+    /** 根号内容的末尾位置：带括号的组要回到闭括号之前 */
+    private fun innerEnd(a: Nat): Int =
+        if (a.srcStart < 0) -1
+        else if (isGroupNode(a)) (a.srcEnd - 1).coerceAtLeast(a.srcStart)
+        else a.srcEnd
+
+    /** 光标是否落在某个二维结构（分数/上标/根号/积分模板）的源码区间里 */
+    private fun insideStructure(node: Nat, cur: Int): Boolean {
+        val structural = node is Nat.Frac || node is Nat.Sup || node is Nat.Sqrt || node is Nat.Integ
+        if (structural && inSpan(node, cur)) return true
+        return when (node) {
+            is Nat.Row -> node.items.any { insideStructure(it, cur) }
+            is Nat.Frac -> insideStructure(node.n, cur) || insideStructure(node.d, cur)
+            is Nat.Sqrt -> insideStructure(node.a, cur)
+            is Nat.Sup -> insideStructure(node.base, cur) || insideStructure(node.exp, cur)
+            is Nat.Integ -> insideStructure(node.body, cur) || insideStructure(node.lo, cur) ||
+                insideStructure(node.hi, cur)
+            else -> false
+        }
+    }
+
     /** 在光标处插入文本；新光标落在插入文本之后 */
     fun insert(expr: String, pos: Int, text: String): EditResult {
         val p = clamp(expr, pos)

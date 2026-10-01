@@ -12,8 +12,8 @@ android {
         applicationId = "io.paimon.fx991"
         minSdk = 26
         targetSdk = 36
-        versionCode = 113
-        versionName = "1.11.2"
+        versionCode = 114
+        versionName = "1.12.0-symbolic"
 
         ndk {
             // 批次 F 起 ML Kit 带进 4 个 ABI 的 .so（合计约 41 MB），全打进去 APK 会胀到 53 MB。
@@ -28,6 +28,12 @@ android {
     }
 
     signingConfigs {
+        // debug 变体同样要求 v3 关闭（出货包验收卡 v3=false）；v1+v2 保持
+        getByName("debug") {
+            enableV1Signing = true
+            enableV2Signing = true
+            enableV3Signing = false
+        }
         create("release") {
             val propsFile = rootProject.file("keystore.properties")
             if (propsFile.exists()) {
@@ -41,10 +47,11 @@ android {
                 keyAlias = props["keyAlias"]!!
                 keyPassword = props["keyPassword"]!!
             }
-            // ColorOS 等安装器只认 v1（JAR）签名；v2/v3 一并全开（2026-10-01：缺 v1 报「没有签名文件」装不上）
+            // ColorOS 安装器解析不了 v3 签名块（报「解析失败：安装包没有签名文件」整包拒装）；
+            // v1（JAR）+ v2 保留，v3 一律关闭（2026-10-01 踩实；验收：apksigner verify -v 必须 v2=true / v3=false）
             enableV1Signing = true
             enableV2Signing = true
-            enableV3Signing = true
+            enableV3Signing = false
         }
     }
 

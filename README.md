@@ -1,4 +1,4 @@
-# 科学计算器（自然书写 LCD 复刻）· v1.11.0-inline
+# 科学计算器（自然书写 LCD 复刻）· v1.12.0-symbolic
 
 Android 科学计算器（Kotlin + Jetpack Compose，界面交互参考一台科学计算器手机 App）。
 **不含任何品牌厂商的商标、logo、字体或官方图片资源** —— 全部 UI 与图标由代码绘制。
@@ -20,7 +20,9 @@ Android 科学计算器（Kotlin + Jetpack Compose，界面交互参考一台科
 - 精确有理数（BigInteger）+ 浮点双轨；S⇔D 在假分数 / 带分数 / 小数间切换
 - 自然书写 LCD（分数堆叠）+ 可见光标；二级界面 17 个输入框同为自然书写（自有键盘面板）
 - 主行直写：`MatA×MatB` `det/inv/trn` `VctA·VctB` `cross` `∠` 真运算符 `mean/sd` `normcdf/binompdf` …
-- 主行按 `=` 解方程：多项式全部根（含复根，能精确给精确）、超越方程多根扫描、方程组高斯消元
+- 主行按 `=` 解方程：多项式全部根（含复根，能精确给精确：±2 / ±√2 / 4/3 / ±i / (-1±√3i)/2）、超越方程多根扫描、方程组高斯消元
+- `solve(...)` 括号内允许等号：`solve(x^2+1=0)` 按 `=` → `x = ±i`；不带等号仍按 f(x)=0 解；根式过大退数值并标注「近似」
+- 方向键四向全移光标：`◀ ▶` 同层移动，`▲ ▼` 二维结构内上下走（分数分子↔分母、上标↔基线、根号内外、∫ 上限↔下限）；线性式 `▲`= 到首 / `▼`= 到尾；历史走 `=` 的 SHIFT 层
 - 功能键就地括号调用（不弹面板；仅 菜单/设置/历史 保留面板）：`solve(方程)` `sto(式,变量)` `int(式,下,上)` 二维积分模板 `deriv` `sum` `lim` `calc` `dms` `pol` `rec` `ranint` `const(符号)` `conv(值,从,到)` `si(值,前缀)`
 - 模式菜单 12 项：复数 / 矩阵 / 向量 / 统计 / 分布 / 函数帮助 / EQN / BASE-N / TABLE / RATIO / ODE（RK4）/ 拍照解题（视觉 API 自配 Key，本机明文存储有告知）
 - GeoGebra 式自定义函数 `f(x)=x^2`、傅里叶级数、复变函数（`i` 进主行、留数 `res`、围道积分 `cint`）
@@ -45,12 +47,12 @@ AGP 8.7.3 · Kotlin 2.0.21 · Gradle 8.14 · JDK 21 · compileSdk 36 · Compose 
 ```powershell
 & "D:\applications\gradle-8.14\bin\gradle.bat" assembleDebug            # 单 ABI（arm64）
 & "D:\applications\gradle-8.14\bin\gradle.bat" assembleDebug -PallAbi   # 四 ABI（模拟器用）
-powershell -File tools\run-tests.ps1                                    # 17 套 JVM 回归
+powershell -File tools\run-tests.ps1                                    # 20 套 JVM 回归（1644 条）
 ```
 
 ## 已知限制
 
-- 不做符号解（CAS）；ODE 为 RK4 数值解 + 二阶以内常系数线性解析解
+- 符号解限多项式方程（精确分数 / 根式 / 复根）；超越方程为区间扫描数值根；一般 CAS（化简 / 展开 / 符号积分）不做；ODE 为 RK4 数值解 + 二阶以内常系数线性解析解
 - 分子分母超规模自动落回浮点（与真机一致）；超越方程扫描区间内给数值根
 - 检查更新依赖 api.github.com 可达性；无网时静默跳过，不影响计算功能
 - 拍照解题图片：JPEG/PNG/GIF(首帧)/BMP/WebP 全版本可解；HEIC/HEIF 需 Android 9+（API 28），AVIF 需 Android 12+（API 31）；TIFF 平台解码器不支持（不引第三方解码库，解不了会明确提示格式、本机系统版本与转 JPG 的出路）

@@ -37,6 +37,9 @@ private typealias Mono = List<Int>
 
 private class RootText(val display: String, val insert: String?)
 
+/** 一批根 + 是否为近似数值回退（根式过大 / 过复杂拿不到精确形式时 true） */
+private class RootList(val roots: List<RootText>, val approx: Boolean)
+
 object EquationSolver {
 
     private val VARS3 = listOf("x", "y", "z")
@@ -118,14 +121,15 @@ object EquationSolver {
             return SolveResult(SolveKind.NONE, "无解", note = "方程化简后不含 $varName 且不为 0")
         }
         val deg = c.size - 1
-        val roots: List<RootText>? = when (deg) {
-            1 -> listOfRoots(c[0].div(c[1]).negate(), null)
+        val solved: RootList? = when (deg) {
+            1 -> RootList(listOfRoots(c[0].div(c[1]).negate(), null), approx = false)
             2 -> quadraticRoots(c[0], c[1], c[2])
             else -> rationalFactorRoots(c)
         }
-        if (roots == null) {
+        if (solved == null) {
             return SolveResult(SolveKind.ERROR, "求根失败", note = "高次多项式未能给出精确根")
         }
+        val roots = solved.roots
         if (roots.isEmpty()) return SolveResult(SolveKind.NONE, "无解")
         // 全部是有理根时按大小排序（好看且与参考机一致）
         val ordered = if (roots.all { it.insert != null }) {
@@ -133,7 +137,8 @@ object EquationSolver {
         } else roots
         val text = varName + " = " + ordered.joinToString(", ") { it.display }
         val items = ordered.map { SolveItem("$varName = ${it.display}", it.insert) }
-        return SolveResult(SolveKind.SOLUTIONS, text, items)
+        val note = if (solved.approx) "近似数值解：根式过大或过复杂，未能精确化简" else ""
+        return SolveResult(SolveKind.SOLUTIONS, text, items, note)
     }
 
     private fun listOfRoots(r: Rational, exact: Rational?): List<RootText> =
@@ -143,19 +148,23 @@ object EquationSolver {
 
     /**
      * 二次方程 ax² + bx + c = 0：
-     * 判别式能开尽 → 精确分数；开不尽 → 精确根式（如 ±√2）；负 → 复根（如 ±i）。
+     * 判别式能开尽 → 精确分数；开不尽 → 精确根式（如 ±√2）；负 → 复根（如 ±i、(−1±√3i)/2）。
+     * 根式过大 / 过复杂 → 数值回退并标 approx（界面提示是近似）。
      */
-    private fun quadraticRoots(c0: Rational, c1: Rational, c2: Rational): List<RootText> {
+    private fun quadraticRoots(c0: Rational, c1: Rational, c2: Rational): RootList {
         val disc = c1.times(c1).minus(c2.times(c0).times(Rational.of(4)))
         val den = c2.times(Rational.of(2))
         val p = c1.negate().div(den)
-        if (disc.isZero) return listOfRoots(p, null)
+        if (disc.isZero) return RootList(listOfRoots(p, null), approx = false)
         if (disc.signum > 0) {
             val s = disc.sqrtExact()
             if (s != null) {
-                return listOf(
-                    RootText(rt(p.plus(s.div(den))), rt(p.plus(s.div(den)))),
-                    RootText(rt(p.minus(s.div(den))), rt(p.minus(s.div(den)))),
+                return RootList(
+                    listOf(
+                        RootText(rt(p.plus(s.div(den))), rt(p.plus(s.div(den)))),
+                        RootText(rt(p.minus(s.div(den))), rt(p.minus(s.div(den)))),
+                    ),
+                    approx = false,
                 )
             }
         }
@@ -163,13 +172,26 @@ object EquationSolver {
         val mag = if (neg) disc.negate() else disc
         val simp = simplifySqrt(mag) ?: return numericQuadratic(p, mag, den, neg)
         val (outer, rad) = simp
-        val q = outer.div(den)
+        // 根式系数取绝对值：首项系数为负时 q<0，但 ± 成对写出与正负无关（否则会出现「±−i」）
+        val q = outer.div(den).abs()
         val radPart = radText(q, rad, neg)
         return if (p.isZero) {
-            listOf(RootText("\u00B1$radPart", null))
+            RootList(listOf(RootText("\u00B1$radPart", null)), approx = false)
+        } else if (p.den == q.den && p.den > java.math.BigInteger.ONE) {
+            // 同分母合并写法：(-1 ± √3i)/2（三次单位根这类，比 -1/2 ± 1/2√3i 好读）
+            val core = radCore(rad, neg)
+            val qn = q.num
+            val qpart = if (qn == java.math.BigInteger.ONE) core else qn.toString() + core
+            RootList(listOf(RootText("(${p.num} \u00B1 $qpart)/${p.den}", null)), approx = false)
         } else {
-            listOf(RootText("${rt(p)} \u00B1 $radPart", null))
+            RootList(listOf(RootText("${rt(p)} \u00B1 $radPart", null)), approx = false)
         }
+    }
+
+    /** 根式核心部分（不带系数）：√m / √m·i / i */
+    private fun radCore(m: Long, imaginary: Boolean): String {
+        val i = if (imaginary) "i" else ""
+        return if (m == 1L) (if (imaginary) "i" else "1") else "\u221A$m$i"
     }
 
     /** 根式部分：√m 的形式（负数带 i），q 为系数 */
@@ -188,24 +210,28 @@ object EquationSolver {
         return coef
     }
 
-    /** 根式太大 / 太复杂 → 数值回退 */
-    private fun numericQuadratic(p: Rational, mag: Rational, den: Rational, imaginary: Boolean): List<RootText> {
-        val half = mag.toDouble().let { kotlin.math.sqrt(it) }.let { it / den.toDouble() }
+    /** 根式太大 / 太复杂 → 数值回退（标 approx，界面提示是近似） */
+    private fun numericQuadratic(p: Rational, mag: Rational, den: Rational, imaginary: Boolean): RootList {
+        val half = mag.toDouble().let { kotlin.math.sqrt(it) }.let { it / den.abs().toDouble() }
         val pr = p.toDouble()
-        return if (imaginary) {
-            listOf(RootText("${CalcEngine.format(pr)} \u00B1 ${CalcEngine.format(half)}i", null))
-        } else {
-            listOf(
-                RootText(CalcEngine.format(pr + half), CalcEngine.format(pr + half)),
-                RootText(CalcEngine.format(pr - half), CalcEngine.format(pr - half)),
-            )
-        }
+        return RootList(
+            if (imaginary) {
+                listOf(RootText("${CalcEngine.format(pr)} \u00B1 ${CalcEngine.format(half)}i", null))
+            } else {
+                listOf(
+                    RootText(CalcEngine.format(pr + half), CalcEngine.format(pr + half)),
+                    RootText(CalcEngine.format(pr - half), CalcEngine.format(pr - half)),
+                )
+            },
+            approx = true,
+        )
     }
 
     /** 三次及以上：先抽有理根（有理根定理）降阶，剩下二次用公式 */
-    private fun rationalFactorRoots(coeffs: List<Rational>): List<RootText>? {
+    private fun rationalFactorRoots(coeffs: List<Rational>): RootList? {
         var cur = coeffs
         val out = ArrayList<RootText>()
+        var approx = false
         var guard = 0
         while (cur.size - 1 > 2 && guard++ < 8) {
             val root = findRationalRoot(cur) ?: return null
@@ -217,12 +243,16 @@ object EquationSolver {
         }
         val deg = cur.size - 1
         when (deg) {
-            2 -> out.addAll(quadraticRoots(cur[0], cur[1], cur[2]))
+            2 -> {
+                val quad = quadraticRoots(cur[0], cur[1], cur[2])
+                out.addAll(quad.roots)
+                approx = quad.approx
+            }
             1 -> out.addAll(listOfRoots(cur[0].div(cur[1]).negate(), null))
             0 -> Unit
             else -> return null
         }
-        return dedupe(out)
+        return RootList(dedupe(out), approx)
     }
 
     private fun findRationalRoot(coeffs: List<Rational>): Rational? {

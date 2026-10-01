@@ -82,6 +82,15 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
         cursor = io.paimon.fx991.ui.CursorModel.moveRight(expression, cursor)
     }
 
+    /** 批次 K3-symbolic：方向键上下 = 二维结构内垂直移光标（分数分子↔分母、上标↔基线、根号内外、∫上下限） */
+    fun moveCursorUp() {
+        cursor = io.paimon.fx991.ui.CursorModel.moveUp(expression, cursor)
+    }
+
+    fun moveCursorDown() {
+        cursor = io.paimon.fx991.ui.CursorModel.moveDown(expression, cursor)
+    }
+
     var resultText by mutableStateOf("")
         private set
 
@@ -340,9 +349,11 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
             KeyAction.MPlus -> memoryOp(1.0)
             KeyAction.MMinus -> memoryOp(-1.0)
             KeyAction.Mrc -> mrc()
-            KeyAction.HistUp, KeyAction.PadUp -> historyUp()
-            KeyAction.HistDown, KeyAction.PadDown -> historyDown()
-            // 批次 K3-A：方向键左右 = 主行光标移动（上下仍是历史）
+            KeyAction.HistUp -> historyUp()
+            KeyAction.HistDown -> historyDown()
+            // 批次 K3-symbolic：方向键四向全是主行光标移动（上下 = 二维结构内垂直走；历史改走 = 的 SHIFT 层面板）
+            KeyAction.PadUp -> moveCursorUp()
+            KeyAction.PadDown -> moveCursorDown()
             KeyAction.PadLeft -> moveCursorLeft()
             KeyAction.PadRight -> moveCursorRight()
             KeyAction.PadOk -> evaluateNow()
