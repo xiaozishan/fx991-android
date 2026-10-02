@@ -359,7 +359,7 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
             KeyAction.PadOk -> evaluateNow()
             KeyAction.Sd -> cycleDisplay()
             KeyAction.FracFormat -> cycleDisplay()
-            KeyAction.Fraction -> insert("\u00F7")
+            KeyAction.Fraction -> insertFractionKey()
             KeyAction.SignToggle -> insert("\u2212")
             KeyAction.Mode, KeyAction.Menu -> openOverlay(Overlay.MODE)
             KeyAction.Settings -> openOverlay(Overlay.SETTINGS)
@@ -420,6 +420,25 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
     private fun insertTemplate(text: String, back: Int) {
         insert(text)
         cursor = (cursor - back).coerceIn(0, expression.length)
+    }
+
+    /**
+     * 分数键（K3-symbolic 修复）：分子为空槽（行首 / 运算符后）时光标留在分子，
+     * 与二级界面键盘 a/b（cursorBack=1）行为一致；分子有内容时照常进分母槽。
+     * 求值后首按仍走 insert() 的 Ans 前缀逻辑（Ans 当分子，光标进分母）。
+     */
+    private fun insertFractionKey() {
+        if (shouldRemainNewEntry()) {
+            insert("\u00F7")
+            return
+        }
+        val r = io.paimon.fx991.ui.CursorModel.insertFraction(expression, cursor)
+        expression = r.text
+        cursor = r.cursor
+        histCursor = -1
+        solutionItems = emptyList()
+        resultNote = ""
+        refreshPreview()
     }
 
     /** 批次 K3：hyp —— 插入 sinh()；光标还停在双曲调用口时重复按 → sinh → cosh → tanh 循环 */

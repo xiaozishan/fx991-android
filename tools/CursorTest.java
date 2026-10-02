@@ -264,6 +264,57 @@ public class CursorTest {
         check("1÷2 光标在分母后", Integer.parseInt(box[1]) == 3);
 
         System.out.println();
+        System.out.println("== K3-symbolic 修复：方向键垂直移动（▲▼） ==");
+
+        // P1：▼ 从指数「出」到上标块之后的基线位，不再落进 "^" 之前
+        check("x^2 指数末尾 ▼ → 留在块尾", CursorModel.INSTANCE.moveDown("x^2", 3) == 3);
+        check("x^2 指数中间 ▼ → 出到块尾", CursorModel.INSTANCE.moveDown("x^2", 2) == 3);
+        check("x² 指数末尾 ▼ → 留在块尾", CursorModel.INSTANCE.moveDown("x²", 2) == 2);
+        // 复现原 bug 的完整操作流：x^2 ▼ +3 必须得到 x^2+3（旧逻辑给 x+3^2）
+        r = ins("x^2", CursorModel.INSTANCE.moveDown("x^2", 3), "+3");
+        check("x^2 ▼ 后打 +3 → x^2+3", r.getText().equals("x^2+3"));
+        r = ins("x²", CursorModel.INSTANCE.moveDown("x²", 2), "×5");
+        check("x² ▼ 后打 ×5 → x²×5", r.getText().equals("x²×5"));
+        // ▲ 从底数进指数仍保留
+        check("x^2 底数 ▲ → 进指数", CursorModel.INSTANCE.moveUp("x^2", 1) == 3);
+
+        // P2：结构边缘位不再冻死 —— 按线性式走首/尾
+        check("√(3) 行首 ▼ → 到尾", CursorModel.INSTANCE.moveDown("√(3)", 0) == 4);
+        check("√(3) 行首 ▲ → 到首", CursorModel.INSTANCE.moveUp("√(3)", 0) == 0);
+        check("int(x,0,1) 末尾 ▲ → 到首", CursorModel.INSTANCE.moveUp("int(x,0,1)", 10) == 0);
+        check("int(x,0,1) 末尾 ▼ → 到尾", CursorModel.INSTANCE.moveDown("int(x,0,1)", 10) == 10);
+        check("int(x,0,1) 前缀 ▼ → 到尾", CursorModel.INSTANCE.moveDown("int(x,0,1)", 1) == 10);
+        // 槽位里该方向没去处仍原地（不回归）
+        check("1÷2 分母末尾 ▼ → 原地", CursorModel.INSTANCE.moveDown("1÷2", 3) == 3);
+        check("1÷2 分子开头 ▲ → 原地", CursorModel.INSTANCE.moveUp("1÷2", 0) == 0);
+
+        // P3：光标在容器前位置 → 画到容器前面（√ 符号位 / int( 前缀）
+        p = proj("√(3)", 0);
+        check("√(3) 行首光标画在 √ 前", join(p).contains(CARET + "√"));
+        p = proj("int(x,0,1)", 0);
+        check("int( 前缀光标画在 ∫ 前", join(p).contains(CARET + "∫"));
+        // 原来的落点行为不回归
+        check("√(3) 根号内光标仍进槽", path("√(3)", 2).contains("/sqrt"));
+        check("int 三槽光标仍进槽", path("int(x,0,1)", 4).contains("/body")
+                && path("int(x,0,1)", 6).contains("/lo") && path("int(x,0,1)", 8).contains("/hi"));
+
+        System.out.println();
+        System.out.println("== K3-symbolic 修复：主行分数键 insertFraction ==");
+
+        // P4：分子空槽 → 光标留分子；分子有内容 → 进分母
+        r = CursorModel.INSTANCE.insertFraction("", 0);
+        check("空行分数键 → ÷", r.getText().equals("÷"));
+        check("空行分数键光标在分子", path(r.getText(), r.getCursor()).contains("/num"));
+        r = CursorModel.INSTANCE.insertFraction("3+", 2);
+        // 运算符后光标位置可能渲染在 "+" 之后（边界归属），但打字必须落进分子
+        EditResult r2 = CursorModel.INSTANCE.insert(r.getText(), r.getCursor(), "1");
+        check("运算符后分数键：打字落进分子", r.getText().equals("3+÷") && r2.getText().equals("3+1÷"));
+        r = CursorModel.INSTANCE.insertFraction("12", 2);
+        check("数字后分数键光标在分母", r.getText().equals("12÷") && path(r.getText(), r.getCursor()).contains("/den"));
+        r = CursorModel.INSTANCE.insertFraction("(1+2)", 5);
+        check("闭括号后分数键光标在分母", r.getText().equals("(1+2)÷") && path(r.getText(), r.getCursor()).contains("/den"));
+
+        System.out.println();
         System.out.println("RESULT pass=" + pass + " fail=" + fail);
         if (fail > 0) System.exit(1);
     }

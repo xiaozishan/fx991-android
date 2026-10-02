@@ -1,4 +1,4 @@
-﻿# Android
+# Android
 .gradle/
 build/
 app/build/
@@ -11,4 +11,7 @@ local.properties
 # fx991 release 签名密钥（2026-10-01）
 keystore.properties
 tools/*.keystore
+
+# 本机开发工具链（JDK/Gradle/Android SDK 的本地副本，不进库）
+.devtool/
 

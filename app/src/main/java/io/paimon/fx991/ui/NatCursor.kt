@@ -59,12 +59,14 @@ object CursorModel {
 
     // -------------------------------------------------------------------
     // 批次 K3-symbolic：方向键上下 = 二维结构内的垂直光标移动（不再是历史）
-    //   · 分数：分母 ↔ 分子        · 上标：指数 ↔ 基线（底数）
+    //   · 分数：分母 ↔ 分子        · 上标：▲ 进指数；▼ 出到上标块之后的基线位
     //   · 根号：内外（√ 内按 ↑ 出到根号后；根号后按 ↓ 回到 √ 内）
     //   · ∫ 模板：被积式 ↑→上限 / ↓→下限；上限 ↓→下限；下限 ↑→上限
     //   · 相对偏移在槽位间等距映射（分子第 2 列 ↓ 到分母第 2 列），超长钳到槽尾
-    //   · 光标不在任何二维结构里时：↑ = 到表达式开头，↓ = 到末尾
-    //   · 光标在二维结构里但该方向没有去处（如已在分子再按 ↑）→ 原地不动
+    //   · 光标不在任何二维结构槽位里时：↑ = 到表达式开头，↓ = 到末尾
+    //     （含结构的"边缘位"：√ 符号处、int( 前缀、模板收尾括号之后 ——
+    //       旧逻辑把这些位置也算"在结构里"导致 ▲▼ 完全冻死）
+    //   · 光标在二维结构槽位里但该方向没有去处（如已在分子再按 ↑）→ 原地不动
     // -------------------------------------------------------------------
 
     /** 上移一格（二维结构内向「上」走） */
@@ -82,8 +84,9 @@ object CursorModel {
             return if (up) 0 else expr.length     // 解析不了就退化为首/尾
         }
         verticalTarget(root, p, up)?.let { return it }
-        // 在二维结构里但该方向没去处 → 原地；纯线性表达式 → 首/尾
-        return if (insideStructure(root, p)) p else if (up) 0 else expr.length
+        // 在二维结构的槽位里但该方向没去处 → 原地；
+        // 纯线性表达式、或只挨着结构边缘（√ 符号 / int( 前缀 / 收尾括号后）→ 首/尾
+        return if (insideSlot(root, p)) p else if (up) 0 else expr.length
     }
 
     /** 槽位间等距映射：从 from 槽里的相对列 → to 槽里同列（超长钳到槽尾） */
@@ -131,7 +134,10 @@ object CursorModel {
             }
             is Nat.Sup -> when {
                 up && inSpan(node.base, cur) -> mapSlot(node.base, node.exp, cur)
-                !up && inSpan(node.exp, cur) -> mapSlot(node.exp, node.base, cur)
+                // K3-symbolic 修复：▼ 从指数「出」到整个上标块之后的基线位，
+                // 不再落进底数内部（旧逻辑落到底数末尾 = "^" 之前，
+                // 接着打字会把想要的 x^2+3 错成 x+3^2）
+                !up && inSpan(node.exp, cur) -> node.srcEnd.takeIf { it >= 0 }
                 else -> null
             }
             is Nat.Sqrt -> when {
@@ -157,19 +163,18 @@ object CursorModel {
         else if (isGroupNode(a)) (a.srcEnd - 1).coerceAtLeast(a.srcStart)
         else a.srcEnd
 
-    /** 光标是否落在某个二维结构（分数/上标/根号/积分模板）的源码区间里 */
-    private fun insideStructure(node: Nat, cur: Int): Boolean {
-        val structural = node is Nat.Frac || node is Nat.Sup || node is Nat.Sqrt || node is Nat.Integ
-        if (structural && inSpan(node, cur)) return true
-        return when (node) {
-            is Nat.Row -> node.items.any { insideStructure(it, cur) }
-            is Nat.Frac -> insideStructure(node.n, cur) || insideStructure(node.d, cur)
-            is Nat.Sqrt -> insideStructure(node.a, cur)
-            is Nat.Sup -> insideStructure(node.base, cur) || insideStructure(node.exp, cur)
-            is Nat.Integ -> insideStructure(node.body, cur) || insideStructure(node.lo, cur) ||
-                insideStructure(node.hi, cur)
-            else -> false
-        }
+    /**
+     * 光标是否落在某个二维结构（分数/上标/根号/积分模板）的**槽位**源码区间里。
+     * 只数槽位（分子/分母/底数/指数/根号内容/积分三槽），不数容器本身的边缘
+     * （√ 符号、int( 前缀、收尾括号之后）—— 那些位置没有垂直去处，按线性式走首/尾。
+     */
+    private fun insideSlot(node: Nat, cur: Int): Boolean = when (node) {
+        is Nat.Row -> node.items.any { insideSlot(it, cur) }
+        is Nat.Frac -> inSpan(node.n, cur) || inSpan(node.d, cur)
+        is Nat.Sqrt -> inSpan(node.a, cur)
+        is Nat.Sup -> inSpan(node.base, cur) || inSpan(node.exp, cur)
+        is Nat.Integ -> inSpan(node.body, cur) || inSpan(node.lo, cur) || inSpan(node.hi, cur)
+        else -> false
     }
 
     /** 在光标处插入文本；新光标落在插入文本之后 */
@@ -200,6 +205,18 @@ object CursorModel {
             }
         }
         return EditResult(expr.removeRange(p, p + 1), p)
+    }
+
+    /**
+     * 主行分数键（K3-symbolic 修复）：插入 ÷。
+     * 分子是空槽（行首 / 运算符 / 开括号 / 分隔符之后）时，光标留在分子空位
+     * （与二级界面键盘 a/b 的 cursorBack=1 一致）；分子有内容时进分母槽。
+     */
+    fun insertFraction(expr: String, pos: Int): EditResult {
+        val p = clamp(expr, pos)
+        val r = insert(expr, p, "÷")
+        val emptyNum = p == 0 || expr[p - 1] in "+−×÷^(,=;∠·±"
+        return if (emptyNum) EditResult(r.text, p) else r
     }
 }
 
@@ -245,30 +262,41 @@ private fun placeCursor(node: Nat, cur: Int): Nat = when (node) {
             items[idx] = placeCursor(items[idx], cur)
             Nat.Row(items)
         } else {
-            Nat.Row(node.items + Nat.Cursor)
+            // K3-symbolic 修复：cur 落在所有子项之外时按方位放 ——
+            // 在行的起点之前就把光标画到行首，而不是一律甩到行尾
+            if (cur <= node.srcStart) Nat.Row(listOf(Nat.Cursor) + node.items)
+            else Nat.Row(node.items + Nat.Cursor)
         }
     }
 
     is Nat.Frac -> when {
         inSpan(node.n, cur) -> Nat.Frac(placeCursor(node.n, cur), node.d)
         inSpan(node.d, cur) -> Nat.Frac(node.n, placeCursor(node.d, cur))
+        cur <= node.srcStart -> Nat.Row(listOf(Nat.Cursor, node))
         else -> Nat.Row(listOf(node, Nat.Cursor))
     }
 
+    // K3-symbolic 修复：光标在 √ 符号位（内容槽之前）时画到根号前面，
+    // 旧逻辑一律甩到根号后面（◀ 走到行首，光标却显示在根号末尾）
     is Nat.Sqrt ->
-        if (inSpan(node.a, cur)) Nat.Sqrt(placeCursor(node.a, cur)) else Nat.Row(listOf(node, Nat.Cursor))
+        if (inSpan(node.a, cur)) Nat.Sqrt(placeCursor(node.a, cur))
+        else if (cur <= node.srcStart) Nat.Row(listOf(Nat.Cursor, node))
+        else Nat.Row(listOf(node, Nat.Cursor))
 
     is Nat.Sup -> when {
         inSpan(node.base, cur) -> Nat.Sup(placeCursor(node.base, cur), node.exp)
         inSpan(node.exp, cur) -> Nat.Sup(node.base, placeCursor(node.exp, cur))
+        cur <= node.srcStart -> Nat.Row(listOf(Nat.Cursor, node))
         else -> Nat.Row(listOf(node, Nat.Cursor))
     }
 
-    // 批次 K3：光标能落进 ∫ 模板的被积式 / 下限 / 上限三个槽
+    // 批次 K3：光标能落进 ∫ 模板的被积式 / 下限 / 上限三个槽；
+    // K3-symbolic 修复：int( 前缀位置画到 ∫ 前面，不再甩到 dx 之后
     is Nat.Integ -> when {
         inSpan(node.body, cur) -> Nat.Integ(placeCursor(node.body, cur), node.lo, node.hi)
         inSpan(node.lo, cur) -> Nat.Integ(node.body, placeCursor(node.lo, cur), node.hi)
         inSpan(node.hi, cur) -> Nat.Integ(node.body, node.lo, placeCursor(node.hi, cur))
+        cur <= node.srcStart -> Nat.Row(listOf(Nat.Cursor, node))
         else -> Nat.Row(listOf(node, Nat.Cursor))
     }
 
