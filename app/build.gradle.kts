@@ -12,8 +12,8 @@ android {
         applicationId = "io.paimon.fx991"
         minSdk = 26
         targetSdk = 36
-        versionCode = 114
-        versionName = "1.12.0-symbolic"
+        versionCode = 115
+        versionName = "1.12.1-cursorfix"
 
         ndk {
             // 批次 F 起 ML Kit 带进 4 个 ABI 的 .so（合计约 41 MB），全打进去 APK 会胀到 53 MB。
