@@ -218,6 +218,26 @@ object CursorModel {
 
     fun insertOperator(expr: String, pos: Int, op: String): EditResult {
         val p = clamp(expr, pos)
+        // ÷ 在指数里：和分数键一样，要先包住指数，否则会掉到基线下（e^x÷2 = (e^x)÷2）
+        if (op == "÷") {
+            val exp = supExpSlotAt(expr, p)
+            if (exp != null) {
+                val s = exp.first
+                val e = exp.second
+                if (s == e && p == s) {
+                    return EditResult(expr.substring(0, s) + "(÷)" + expr.substring(s), s + 1)
+                }
+                if (p > s && e > s) {
+                    val content = expr.substring(s, e)
+                    if (isWholeParenGroup(content)) {
+                        val at = if (p >= e) e - 1 else p
+                        return insert(expr, at, "÷")
+                    }
+                    val wrapped = expr.substring(0, s) + "(" + content + ")" + expr.substring(e)
+                    return insert(wrapped, p + 1, "÷")
+                }
+            }
+        }
         if (op !in SLOT_OPS) return insert(expr, p, op)
         val span = fracSlotAt(expr, p) ?: return insert(expr, p, op)
         val s = span.first

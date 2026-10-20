@@ -142,6 +142,16 @@ public class FracOpTest {
                 && CursorModel.INSTANCE.exitSupIfAtEnd("e^", 2).getCursor() == 1);
         near("退出后接 +1 在行内", CalcEngine.INSTANCE.evaluate("4^(1)+1", AngleMode.DEG, 0.0, 0.0), 5.0, 1e-9);
 
+        // 16) ÷ 运算符键在指数里（和分数键不同入口）
+        eq("e^x 末尾按 ÷ 键 → e^(x÷)",
+                CursorModel.INSTANCE.insertOperator("e^x", 3, "÷").getText(), "e^(x" + DIV + ")");
+        eq("e^11 末尾按 ÷ 键 → e^(11÷)",
+                CursorModel.INSTANCE.insertOperator("e^11", 4, "÷").getText(), "e^(11" + DIV + ")");
+        eq("空指数按 ÷ 键 → e^(÷)",
+                CursorModel.INSTANCE.insertOperator("e^", 2, "÷").getText(), "e^(" + DIV + ")");
+        eq("× 键不在指数里造分数",
+                CursorModel.INSTANCE.insertOperator("e^x", 3, "×").getText(), "e^x×");
+
         System.out.println("RESULT FracOpTest pass=" + pass + " fail=" + fail);
         if (fail > 0) System.exit(1);
     }
