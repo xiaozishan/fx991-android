@@ -362,7 +362,12 @@ object CursorModel {
         val exp = supExpSlotAt(expr, p) ?: return null
         val s = exp.first
         val e = exp.second
-        if (e == s || p != e) return null
+        if (p != e) return null
+        // 空指数（e^ 后面还没输东西）：直接收掉悬空的 ^，光标回到基行
+        if (s == e) {
+            if (s <= 0 || expr[s - 1] != '^') return null
+            return EditResult(expr.removeRange(s - 1, s), s - 1)
+        }
         val content = expr.substring(s, e)
         if (isWholeParenGroup(content)) return null   // 已在括号外，无需处理
         val wrapped = expr.substring(0, s) + "(" + content + ")" + expr.substring(e)

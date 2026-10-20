@@ -137,7 +137,9 @@ public class FracOpTest {
         check("x^2 末尾按 ▶ 会补括号退出", x1 != null && x1.getText().equals("x^(2)") && x1.getCursor() == 5);
         check("非末尾不触发退出", CursorModel.INSTANCE.exitSupIfAtEnd("x^2", 2) == null);
         check("已是括号指数不再处理", CursorModel.INSTANCE.exitSupIfAtEnd("x^(2)", 5) == null);
-        check("空指数不处理", CursorModel.INSTANCE.exitSupIfAtEnd("x^", 2) == null);
+        check("空指数按 ▶ 收掉悬空 ^", CursorModel.INSTANCE.exitSupIfAtEnd("e^", 2) != null
+                && CursorModel.INSTANCE.exitSupIfAtEnd("e^", 2).getText().equals("e")
+                && CursorModel.INSTANCE.exitSupIfAtEnd("e^", 2).getCursor() == 1);
         near("退出后接 +1 在行内", CalcEngine.INSTANCE.evaluate("4^(1)+1", AngleMode.DEG, 0.0, 0.0), 5.0, 1e-9);
 
         System.out.println("RESULT FracOpTest pass=" + pass + " fail=" + fail);
