@@ -491,8 +491,8 @@ object CursorModel {
                     walk(n.exp)
                 }
                 is Nat.Integ -> {
-                    if (toUpper && n.body.srcEnd == p && n.hi.srcStart >= 0) hit = n.hi.srcStart
-                    if (!toUpper && n.hi.srcStart >= 0 && n.hi.srcStart == p) hit = n.body.srcEnd
+                    // 被积式末尾按 ▶ → 积分块末尾（dx 右边），不跳上限框
+                    if (toUpper && n.body.srcEnd == p) hit = n.srcEnd
                     walk(n.body)
                     walk(n.lo)
                     walk(n.hi)

@@ -154,9 +154,9 @@ public class FracOpTest {
 
         // 17) 积分方向键：被积式末尾 ▶ → 上限；上限 ◀ → 被积式末尾
         Integer up = CursorModel.INSTANCE.integNavTarget("int(x,0,1)", 5, true);
-        check("被积式末尾 ▶ 到上限（pos=8）=> " + up, up != null && up == 8);
+        check("被积式末尾 ▶ 到块末尾（pos=10）=> " + up, up != null && up == 10);
         Integer back = CursorModel.INSTANCE.integNavTarget("int(x,0,1)", 8, false);
-        check("上限 ◀ 回被积式末尾（pos=5）=> " + back, back != null && back == 5);
+        check("反向不再回被积式 => " + back, back == null);
 
         // 18) 积分块边界：从被积式开头往左 → dx 后面（块末尾）
         kotlin.Pair<Integer, Integer> sb = CursorModel.INSTANCE.integSlotBounds("int(x,,)", 4);
