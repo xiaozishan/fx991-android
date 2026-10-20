@@ -158,6 +158,12 @@ public class FracOpTest {
         Integer back = CursorModel.INSTANCE.integNavTarget("int(x,0,1)", 8, false);
         check("上限 ◀ 回被积式末尾（pos=5）=> " + back, back != null && back == 5);
 
+        // 18) 积分块边界：从被积式开头往左 → dx 后面（块末尾）
+        kotlin.Pair<Integer, Integer> sb = CursorModel.INSTANCE.integSlotBounds("int(x,,)", 4);
+        check("被积式槽区间 = (4,5) => " + sb, sb != null && sb.getFirst() == 4 && sb.getSecond() == 5);
+        Integer nodeEnd = CursorModel.INSTANCE.integNodeEnd("int(x,,)", 4);
+        check("积分块末尾 = 8 => " + nodeEnd, nodeEnd != null && nodeEnd == 8);
+
         System.out.println("RESULT FracOpTest pass=" + pass + " fail=" + fail);
         if (fail > 0) System.exit(1);
     }

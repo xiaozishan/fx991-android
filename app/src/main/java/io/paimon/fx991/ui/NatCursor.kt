@@ -394,6 +394,76 @@ object CursorModel {
         return EditResult(wrapped, e + 2)
     }
 
+    /** 光标所在积分块的整体结束位置（dx 之后）；不在积分里返回 null */
+    fun integNodeEnd(expr: String, pos: Int): Int? {
+        val p = clamp(expr, pos)
+        val root = try {
+            buildNat(expr)
+        } catch (_: Exception) {
+            return null
+        }
+        var hit: Int? = null
+        fun walk(n: Nat) {
+            when (n) {
+                is Nat.Row -> n.items.forEach { walk(it) }
+                is Nat.Frac -> {
+                    walk(n.n)
+                    walk(n.d)
+                }
+                is Nat.Sqrt -> walk(n.a)
+                is Nat.Sup -> {
+                    walk(n.base)
+                    walk(n.exp)
+                }
+                is Nat.Integ -> {
+                    if (inSpan(n.body, p) || inSpan(n.lo, p) || inSpan(n.hi, p)) hit = n.srcEnd
+                    walk(n.body)
+                    walk(n.lo)
+                    walk(n.hi)
+                }
+                else -> {}
+            }
+        }
+        walk(root)
+        return hit
+    }
+
+    /** 光标所在积分槽的区间 (start, end)；不在槽内返回 null */
+    fun integSlotBounds(expr: String, pos: Int): Pair<Int, Int>? {
+        val p = clamp(expr, pos)
+        val root = try {
+            buildNat(expr)
+        } catch (_: Exception) {
+            return null
+        }
+        var hit: Pair<Int, Int>? = null
+        fun walk(n: Nat) {
+            when (n) {
+                is Nat.Row -> n.items.forEach { walk(it) }
+                is Nat.Frac -> {
+                    walk(n.n)
+                    walk(n.d)
+                }
+                is Nat.Sqrt -> walk(n.a)
+                is Nat.Sup -> {
+                    walk(n.base)
+                    walk(n.exp)
+                }
+                is Nat.Integ -> {
+                    if (inSpan(n.body, p)) hit = n.body.srcStart to n.body.srcEnd
+                    if (inSpan(n.lo, p)) hit = n.lo.srcStart to n.lo.srcEnd
+                    if (inSpan(n.hi, p)) hit = n.hi.srcStart to n.hi.srcEnd
+                    walk(n.body)
+                    walk(n.lo)
+                    walk(n.hi)
+                }
+                else -> {}
+            }
+        }
+        walk(root)
+        return hit
+    }
+
     /**
      * 积分模板的方向键定位（按屏幕方位，不按源码顺序）：
      *  · 被积式末尾按 ▶ → 积分上限（屏幕上方的那个槽）

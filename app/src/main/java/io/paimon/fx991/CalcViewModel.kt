@@ -75,10 +75,17 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
     val natInput = io.paimon.fx991.ui.NatInput()
 
     fun moveCursorLeft() {
-        // 积分上限槽首按 ◀ → 回到被积式末尾（不跳进上下限）
-        val inInteg = io.paimon.fx991.ui.CursorModel.integNavTarget(expression, cursor, false)
-        if (inInteg != null) {
-            cursor = inInteg
+        // 积分槽内：◀ 只在本槽内移动，不跳进别的槽（换槽用 ▲▼）
+        val slot = io.paimon.fx991.ui.CursorModel.integSlotBounds(expression, cursor)
+        if (slot != null) {
+            val next = io.paimon.fx991.ui.CursorModel.moveLeft(expression, cursor)
+            if (next < slot.first) {
+                // 出槽：从被积式开头往左 → 停到 dx 后面（积分块末尾）
+                val end = io.paimon.fx991.ui.CursorModel.integNodeEnd(expression, cursor)
+                if (end != null) cursor = end
+                return
+            }
+            cursor = next
             return
         }
         val next = io.paimon.fx991.ui.CursorModel.moveLeft(expression, cursor)
@@ -99,6 +106,14 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
         val inInteg = io.paimon.fx991.ui.CursorModel.integNavTarget(expression, cursor, true)
         if (inInteg != null) {
             cursor = inInteg
+            return
+        }
+        // 积分槽内：▶ 只在本槽内移动
+        val slot = io.paimon.fx991.ui.CursorModel.integSlotBounds(expression, cursor)
+        if (slot != null) {
+            val next = io.paimon.fx991.ui.CursorModel.moveRight(expression, cursor)
+            if (next > slot.second) return
+            cursor = next
             return
         }
         cursor = io.paimon.fx991.ui.CursorModel.moveRight(expression, cursor)
