@@ -177,6 +177,33 @@ private fun SupView(node: Nat.Sup, style: NatStyle, signal: Int = -1) {
 }
 
 /**
+ * 分数槽的括号隐去：分子/分母整串被一层括号包住时，渲染时去掉这对括号。
+ * 分数横线本身就是分组，真机也不会把这种括号画出来；源码里保留括号是为了语义正确。
+ */
+private fun slotNode(n: Nat): Nat {
+    if (n !is Nat.Row) return n
+    val items = n.items
+    if (items.size < 3) return n
+    val first = items.first()
+    val last = items.last()
+    if (!(first is Nat.Sym && first.text == "(" && last is Nat.Sym && last.text == ")")) return n
+    var depth = 0
+    for (i in items.indices) {
+        val s = items[i]
+        if (s is Nat.Sym && s.text == "(") depth++
+        else if (s is Nat.Sym && s.text == ")") {
+            depth--
+            if (depth == 0 && i != items.lastIndex) return n
+        }
+    }
+    if (depth != 0) return n
+    val inner = Nat.Row(items.subList(1, items.size - 1))
+    inner.srcStart = items[1].srcStart
+    inner.srcEnd = items[items.size - 2].srcEnd
+    return inner
+}
+
+/**
  * 分数：分子 / 分数线 / 分母 上下堆叠。
  *
  * 宽度**完全由内容自然包裹**（自定义 measure 取分子/分母二者较大者），
@@ -204,8 +231,8 @@ private fun FracView(node: Nat.Frac, style: NatStyle, signal: Int = -1) {
             }
         },
         content = {
-            Box(Modifier.padding(horizontal = FracPadH)) { NatNodeView(node.n, style, signal) }
-            Box(Modifier.padding(horizontal = FracPadH)) { NatNodeView(node.d, style, signal) }
+            Box(Modifier.padding(horizontal = FracPadH)) { NatNodeView(slotNode(node.n), style, signal) }
+            Box(Modifier.padding(horizontal = FracPadH)) { NatNodeView(slotNode(node.d), style, signal) }
         },
     ) { measurables, constraints ->
         val relaxed = constraints.copy(minWidth = 0, minHeight = 0)

@@ -406,7 +406,11 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
             isError = false
             cursor = expression.length
         } else {
-            val r = io.paimon.fx991.ui.CursorModel.insert(expression, cursor, text)
+            // 批次 K6：分数槽里直接打 × ÷ 留在槽内（分母吃到乘积，不用手动括号）
+            val r = if (text == "\u00D7" || text == "\u00F7")
+                io.paimon.fx991.ui.CursorModel.insertOperator(expression, cursor, text)
+            else
+                io.paimon.fx991.ui.CursorModel.insert(expression, cursor, text)
             expression = r.text
             cursor = r.cursor
         }
@@ -1278,6 +1282,10 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
     var updateDismissedTag by mutableStateOf("")
         private set
 
+    /** 被「跳过此版本」的 tag（跨会话持久；之后不再提示这个版本，除非出现更新版本） */
+    var skippedVersionTag by mutableStateOf(updatePrefs.getString(KEY_UPDATE_SKIP, "") ?: "")
+        private set
+
     fun setAutoCheck(b: Boolean) {
         autoCheckUpdate = b
         updatePrefs.edit().putBoolean(KEY_UPDATE_AUTO, b).apply()
@@ -1287,19 +1295,32 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
         updateDismissedTag = updateAvailable?.tag ?: ""
     }
 
+    /** 跳过当前版本：永久记下 tag，以后只在新 tag 时再提示 */
+    fun skipUpdate() {
+        val tag = updateAvailable?.tag ?: return
+        skippedVersionTag = tag
+        updateDismissedTag = tag
+        updateAvailable = null
+        updatePrefs.edit().putString(KEY_UPDATE_SKIP, tag).apply()
+    }
+
     /** 启动时静默检查：开关关 → 直接返回；12 小时窗口内 → 不请求，用缓存结果决定是否提示 */
     fun autoCheckUpdateIfDue() {
         if (!autoCheckUpdate) return
         val last = updatePrefs.getLong(KEY_UPDATE_AT, 0L)
         if (!UpdateCheck.dueForAutoCheck(last, System.currentTimeMillis())) {
             val cachedTag = updatePrefs.getString(KEY_UPDATE_TAG, "") ?: ""
-            if (cachedTag.isNotEmpty() && UpdateCheck.isNewer(cachedTag, APP_VERSION)) {
+            if (cachedTag.isNotEmpty() && cachedTag != skippedVersionTag &&
+                UpdateCheck.isNewer(cachedTag, APP_VERSION)
+            ) {
                 updateAvailable = ReleaseInfo(
                     tag = cachedTag,
                     version = cachedTag.removePrefix("v").removePrefix("V"),
                     pageUrl = updatePrefs.getString(KEY_UPDATE_PAGE, "") ?: "",
                     apkUrl = updatePrefs.getString(KEY_UPDATE_APK, "") ?: "",
                     title = "",
+                    notes = updatePrefs.getString(KEY_UPDATE_NOTES, "") ?: "",
+                    apkSize = updatePrefs.getLong(KEY_UPDATE_SIZE, 0L),
                 )
             }
             return
@@ -1334,10 +1355,13 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
                     .putString(KEY_UPDATE_TAG, info.tag)
                     .putString(KEY_UPDATE_PAGE, info.pageUrl)
                     .putString(KEY_UPDATE_APK, info.apkUrl)
+                    .putString(KEY_UPDATE_NOTES, info.notes)
+                    .putLong(KEY_UPDATE_SIZE, info.apkSize)
                     .apply()
                 latestVersionText = info.tag
                 if (UpdateCheck.isNewer(info.tag, APP_VERSION)) {
-                    updateAvailable = info
+                    // 手动检查时即使跳过了也照实回显；自动检查则尊重「跳过此版本」
+                    updateAvailable = if (auto && info.tag == skippedVersionTag) null else info
                     updateCheckResult = "发现新版本 ${info.tag}（当前 $APP_VERSION）"
                 } else {
                     updateAvailable = null
@@ -1401,5 +1425,8 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
         const val KEY_UPDATE_TAG = "last_tag"
         const val KEY_UPDATE_PAGE = "last_page_url"
         const val KEY_UPDATE_APK = "last_apk_url"
+    const val KEY_UPDATE_NOTES = "last_notes"
+    const val KEY_UPDATE_SIZE = "last_apk_size"
+    const val KEY_UPDATE_SKIP = "skip_tag"
     }
 }

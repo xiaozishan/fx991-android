@@ -208,6 +208,87 @@ object CursorModel {
     }
 
     /**
+     * 运算符输入（批次 K6）：光标在**分数的分子/分母槽**里时，× ÷ 要留在槽内。
+     *
+     * 线性源码里槽位的分组只能靠括号表达，所以自动给槽内容补一层括号；
+     * 渲染层会把这对自动补的括号隐去（分数横线本身就是分组）。
+     * + − 不在此列 —— 打完分数再按 + 仍按原语义落到分数外面。
+     */
+    private val SLOT_OPS = setOf("\u00D7", "\u00F7")
+
+    fun insertOperator(expr: String, pos: Int, op: String): EditResult {
+        val p = clamp(expr, pos)
+        if (op !in SLOT_OPS) return insert(expr, p, op)
+        val span = fracSlotAt(expr, p) ?: return insert(expr, p, op)
+        val s = span.first
+        val e = span.last + 1
+        if (e <= s || p <= s) return insert(expr, p, op)   // 空槽 / 槽首：按普通输入
+        val content = expr.substring(s, e)
+        if (isWholeParenGroup(content)) {
+            // 已经是整组括号：光标贴在 ')' 前时把运算符放进括号内
+            val at = if (p >= e) e - 1 else p
+            return insert(expr, at, op)
+        }
+        val wrapped = expr.substring(0, s) + "(" + content + ")" + expr.substring(e)
+        return insert(wrapped, p + 1, op)
+    }
+
+    /** 离光标最近（最深）的那个分数槽的源码区间 */
+    private fun fracSlotAt(expr: String, pos: Int): IntRange? {
+        val root = try {
+            buildNat(expr)
+        } catch (_: Exception) {
+            return null
+        }
+        var best: IntRange? = null
+        fun walk(n: Nat) {
+            when (n) {
+                is Nat.Row -> n.items.forEach { if (inSpan(it, pos)) walk(it) }
+                is Nat.Frac -> {
+                    if (inSpan(n.n, pos)) {
+                        if (n.n.srcStart >= 0 && n.n.srcEnd > n.n.srcStart) best = n.n.srcStart until n.n.srcEnd
+                        walk(n.n)
+                    }
+                    if (inSpan(n.d, pos)) {
+                        if (n.d.srcStart >= 0 && n.d.srcEnd > n.d.srcStart) best = n.d.srcStart until n.d.srcEnd
+                        walk(n.d)
+                    }
+                }
+                is Nat.Sqrt -> if (inSpan(n.a, pos)) walk(n.a)
+                is Nat.Sup -> {
+                    if (inSpan(n.base, pos)) walk(n.base)
+                    if (inSpan(n.exp, pos)) walk(n.exp)
+                }
+                is Nat.Integ -> {
+                    if (inSpan(n.body, pos)) walk(n.body)
+                    if (inSpan(n.lo, pos)) walk(n.lo)
+                    if (inSpan(n.hi, pos)) walk(n.hi)
+                }
+                else -> {}
+            }
+        }
+        walk(root)
+        return best
+    }
+
+    /** 整串是否恰好被一层括号包住（如 "(5×6)"）；中间提前闭合则返回 false */
+    private fun isWholeParenGroup(s: String): Boolean {
+        if (s.length < 2 || s[0] != '(' || s[s.length - 1] != ')') return false
+        var depth = 0
+        for (i in s.indices) {
+            when (s[i]) {
+                '(' -> depth++
+                ')' -> {
+                    depth--
+                    if (depth < 0) return false
+                    if (depth == 0 && i != s.length - 1) return false
+                }
+            }
+        }
+        return depth == 0
+    }
+
+    /**
      * 主行分数键（K3-symbolic 修复）：插入 ÷。
      * 分子是空槽（行首 / 运算符 / 开括号 / 分隔符之后）时，光标留在分子空位
      * （与二级界面键盘 a/b 的 cursorBack=1 一致）；分子有内容时进分母槽。

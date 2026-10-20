@@ -1,4 +1,4 @@
-plugins {
+﻿plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
@@ -12,8 +12,8 @@ android {
         applicationId = "io.paimon.fx991"
         minSdk = 26
         targetSdk = 36
-        versionCode = 117
-        versionName = "1.12.3-supfix"
+        versionCode = 118
+        versionName = "1.12.4-fracop"
 
         ndk {
             // 批次 F 起 ML Kit 带进 4 个 ABI 的 .so（合计约 41 MB），全打进去 APK 会胀到 53 MB。

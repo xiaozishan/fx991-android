@@ -3,12 +3,12 @@
 # + 自然书写堆叠显示护栏 16 条 + 批次 D 四新模式 + 批次 K3 图片格式兼容 + 批次 K3 就地括号调用）
 # 用法：powershell -File tools\run-tests.ps1
 $ErrorActionPreference = "Stop"
-$env:JAVA_HOME = "D:\applications\jdk-21"
+$env:JAVA_HOME = "D:\applications\toolchains\jdk-21"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
-$java = "D:\applications\jdk-21\bin\java.exe"
-$javac = "D:\applications\jdk-21\bin\javac.exe"
+$java = "D:\applications\toolchains\jdk-21\bin\java.exe"
+$javac = "D:\applications\toolchains\jdk-21\bin\javac.exe"
 
 $stdlib = Get-ChildItem "$env:USERPROFILE\.gradle\caches\modules-2\files-2.1\org.jetbrains.kotlin\kotlin-stdlib" `
     -Recurse -Filter "kotlin-stdlib-2.0.21.jar" | Select-Object -First 1 -ExpandProperty FullName
@@ -34,7 +34,8 @@ $suites = @(
     @{ name = "UpdateCheckTest"; file = "tools\UpdateCheckTest.java"; out = "$env:TEMP\fx991-t17" },
     @{ name = "PhotoFormatsTest"; file = "tools\PhotoFormatsTest.java"; out = "$env:TEMP\fx991-t18" },
     @{ name = "InlineFuncTest"; file = "tools\InlineFuncTest.java"; out = "$env:TEMP\fx991-t19" },
-    @{ name = "K3SymbolicTest"; file = "tools\K3SymbolicTest.java"; out = "$env:TEMP\fx991-t20" }
+    @{ name = "K3SymbolicTest"; file = "tools\K3SymbolicTest.java"; out = "$env:TEMP\fx991-t20" },
+    @{ name = "FracOpTest"; file = "tools\FracOpTest.java"; out = "$env:TEMP\fx991-t21" }
 )
 
 $failed = 0

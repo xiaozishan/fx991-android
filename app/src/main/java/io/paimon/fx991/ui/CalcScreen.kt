@@ -485,21 +485,47 @@ private fun SettingsPanel(vm: CalcViewModel) {
 @Composable
 private fun UpdatePromptPanel(vm: CalcViewModel, info: ReleaseInfo) {
     val ctx = LocalContext.current
+    val c = LocalCalcColors.current
+    val sizeText = if (info.apkSize > 0) {
+        " · " + String.format(java.util.Locale.US, "%.1f", info.apkSize / 1048576.0) + " MB"
+    } else ""
     PanelCard(
         title = "发现新版本 ${info.tag}",
         subtitle = "当前版本 $APP_VERSION",
         onClose = { vm.dismissUpdate() },
     ) {
-        if (info.title.isNotEmpty()) BodyText(info.title)
-        BodyText("可以到发布页查看更新说明，或直接下载最新 APK 覆盖安装。")
-        Spacer(Modifier.height(10.dp))
-        MenuButton("下载更新（APK 直链）", enabled = info.apkUrl.isNotEmpty()) {
+        if (info.title.isNotEmpty()) {
+            Text(info.title, color = c.chromeInk, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(8.dp))
+        }
+        val notes = info.notes.trim()
+        if (notes.isNotEmpty()) {
+            Text("更新说明", color = c.keyNeutralInk.copy(alpha = 0.7f), fontSize = 11.sp,
+                fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                notes,
+                color = c.keyNeutralInk,
+                fontSize = 12.sp,
+                lineHeight = 18.sp,
+                maxLines = 12,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(12.dp))
+        } else {
+            BodyText("可以到发布页查看更新说明，或直接下载最新 APK 覆盖安装。")
+        }
+        MenuButton("下载安装包$sizeText", hint = if (info.apkUrl.isEmpty()) "该版本没有 APK 资产" else "浏览器打开直链，下载后覆盖安装") {
             runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(info.apkUrl))) }
         }
-        MenuButton("打开发布页面") {
+        Spacer(Modifier.height(8.dp))
+        MenuButton("打开发布页面", hint = "查看完整更新说明与历史版本") {
             runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(info.pageUrl))) }
         }
-        MenuButton("稍后") { vm.dismissUpdate() }
+        Spacer(Modifier.height(8.dp))
+        MenuButton("稍后再说") { vm.dismissUpdate() }
+        Spacer(Modifier.height(8.dp))
+        MenuButton("跳过这个版本", hint = "以后只在新版本发布时再提示") { vm.skipUpdate() }
     }
 }
 

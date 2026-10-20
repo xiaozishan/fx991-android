@@ -35,6 +35,8 @@ data class ReleaseInfo(
     val pageUrl: String, // Release 页面（html_url）
     val apkUrl: String, // 第一个 .apk 资产直链（没有则空串）
     val title: String, // Release 标题（可空串）
+    val notes: String = "", // Release 说明正文（markdown 原文，可空串）
+    val apkSize: Long = 0L, // APK 字节数（没有资产时为 0）
 )
 
 object UpdateCheck {
@@ -107,7 +109,9 @@ object UpdateCheck {
         val page = (root["html_url"] as? String)?.trim().orEmpty()
         if (page.isEmpty()) throw UpdateParseException("返回内容里找不到下载页面（html_url）")
         val title = (root["name"] as? String)?.trim().orEmpty()
+        val notes = (root["body"] as? String)?.trim().orEmpty()
         var apk = ""
+        var apkSize = 0L
         val assets = root["assets"]
         if (assets is List<*>) {
             for (a in assets) {
@@ -115,6 +119,7 @@ object UpdateCheck {
                 val name = (a["name"] as? String) ?: continue
                 if (name.endsWith(".apk")) {
                     apk = (a["browser_download_url"] as? String)?.trim().orEmpty()
+                    apkSize = (a["size"] as? Number)?.toLong() ?: 0L
                     if (apk.isNotEmpty()) break
                 }
             }
@@ -129,7 +134,7 @@ object UpdateCheck {
         if (version.startsWith("v") || version.startsWith("V")) version = version.substring(1)
         val dash = version.indexOf('-')
         if (dash >= 0) version = version.substring(0, dash)
-        return ReleaseInfo(tag = tag, version = version, pageUrl = page, apkUrl = apk, title = title)
+        return ReleaseInfo(tag = tag, version = version, pageUrl = page, apkUrl = apk, title = title, notes = notes, apkSize = apkSize)
     }
 
     // -----------------------------------------------------------------------
