@@ -327,9 +327,60 @@ object CursorModel {
      */
     fun insertFraction(expr: String, pos: Int): EditResult {
         val p = clamp(expr, pos)
+        // 指数槽里按分数键：把指数内容包一层括号再插 ÷，分数要留在指数里，
+        // 否则 ÷ 会按乘法/除法优先级掉到基线下（x^2÷3 = (x^2)÷3）
+        val expSpan = supExpSlotAt(expr, p)
+        if (expSpan != null && p > expSpan.first) {
+            val s = expSpan.first
+            val e = expSpan.last + 1
+            val content = expr.substring(s, e)
+            if (isWholeParenGroup(content)) {
+                val at = if (p >= e) e - 1 else p
+                return insert(expr, at, "÷")
+            }
+            val wrapped = expr.substring(0, s) + "(" + content + ")" + expr.substring(e)
+            return insert(wrapped, p + 1, "÷")
+        }
         val r = insert(expr, p, "÷")
         val emptyNum = p == 0 || expr[p - 1] in "+−×÷^(,=;∠·±"
         return if (emptyNum) EditResult(r.text, p) else r
+    }
+
+    /** 离光标最近的指数槽（Nat.Sup.exp）源码区间 */
+    private fun supExpSlotAt(expr: String, pos: Int): IntRange? {
+        val root = try {
+            buildNat(expr)
+        } catch (_: Exception) {
+            return null
+        }
+        var best: IntRange? = null
+        fun walk(n: Nat) {
+            when (n) {
+                is Nat.Row -> n.items.forEach { if (inSpan(it, pos)) walk(it) }
+                is Nat.Frac -> {
+                    if (inSpan(n.n, pos)) walk(n.n)
+                    if (inSpan(n.d, pos)) walk(n.d)
+                }
+                is Nat.Sqrt -> if (inSpan(n.a, pos)) walk(n.a)
+                is Nat.Sup -> {
+                    if (inSpan(n.base, pos)) walk(n.base)
+                    if (inSpan(n.exp, pos)) {
+                        if (n.exp.srcStart >= 0 && n.exp.srcEnd > n.exp.srcStart) {
+                            best = n.exp.srcStart until n.exp.srcEnd
+                        }
+                        walk(n.exp)
+                    }
+                }
+                is Nat.Integ -> {
+                    if (inSpan(n.body, pos)) walk(n.body)
+                    if (inSpan(n.lo, pos)) walk(n.lo)
+                    if (inSpan(n.hi, pos)) walk(n.hi)
+                }
+                else -> {}
+            }
+        }
+        walk(root)
+        return best
     }
 }
 

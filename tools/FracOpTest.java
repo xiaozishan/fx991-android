@@ -1,5 +1,7 @@
 import io.paimon.fx991.ui.CursorModel;
 import io.paimon.fx991.ui.EditResult;
+import io.paimon.fx991.engine.AngleMode;
+import io.paimon.fx991.engine.CalcEngine;
 
 /**
  * 批次 K6：分数槽内运算符归属回归。
@@ -27,9 +29,18 @@ public class FracOpTest {
         check(what + (got.equals(want) ? "" : "  got=[" + got + "] want=[" + want + "]"), got.equals(want));
     }
 
+    static void near(String what, double got, double want, double eps) {
+        boolean ok = Math.abs(got - want) <= eps;
+        check(what + (ok ? "" : "  got=" + got + " want=" + want), ok);
+    }
+
+    /** 从一次编辑结果继续敲键 */
+    static EditResult type2(EditResult r, String keys) {
+        return type(r.getText(), r.getCursor(), keys);
+    }
+
     /** 模拟逐键输入：每按一次字符/运算符都走 insertOperator 路径 */
-    static EditResult type(String expr, int cur, String keys) {
-        for (int i = 0; i < keys.length(); i++) {
+    static EditResult type(String expr, int cur, String keys) {        for (int i = 0; i < keys.length(); i++) {
             String k = String.valueOf(keys.charAt(i));
             EditResult r = (k.equals(MUL) || k.equals(DIV))
                     ? CursorModel.INSTANCE.insertOperator(expr, cur, k)
@@ -94,6 +105,22 @@ public class FracOpTest {
         eq("嵌套分数只包最内层分母",
                 CursorModel.INSTANCE.insertOperator("1" + DIV + "(2" + DIV + "3)", 6, MUL).getText(),
                 "1" + DIV + "(2" + DIV + "(3" + MUL + "))");
+
+        // 11) 指数里按分数键：分数要留在指数里，不能掉到基线下
+        EditResult e1 = CursorModel.INSTANCE.insertFraction("x^2", 3);
+        eq("x^2 末尾按分数键 → x^(2÷)", e1.getText(), "x^(2" + DIV + ")");
+        check("光标落在分母位置 => " + e1.getCursor(), e1.getCursor() == 5);
+        eq("继续输 3 → 指数内分数",
+                type2(e1, "3").getText(), "x^(2" + DIV + "3)");
+        near("8^(2÷3) = 4", CalcEngine.INSTANCE.evaluate("8^(2" + DIV + "3)", AngleMode.DEG, 0.0, 0.0), 4.0, 1e-9);
+
+        // 12) 指数已有括号：进括号内，不重复套
+        eq("x^(2÷3) 再按分数键进括号内",
+                CursorModel.INSTANCE.insertFraction("x^(2" + DIV + "3)", 7).getText(),
+                "x^(2" + DIV + "3" + DIV + ")");
+
+        // 13) 普通位置不受影响
+        eq("非指数位置仍插 ÷", CursorModel.INSTANCE.insertFraction("12", 2).getText(), "12" + DIV);
 
         System.out.println("RESULT FracOpTest pass=" + pass + " fail=" + fail);
         if (fail > 0) System.exit(1);

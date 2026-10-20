@@ -151,7 +151,7 @@ private fun SupView(node: Nat.Sup, style: NatStyle, signal: Int = -1) {
     Layout(
         content = {
             Box { NatNodeView(node.base, style, signal) }
-            Box { NatNodeView(node.exp, expStyle, signal) }
+            Box { NatNodeView(supExpNode(node.exp), expStyle, signal) }
         },
     ) { measurables, constraints ->
         val relaxed = constraints.copy(minWidth = 0, minHeight = 0)
@@ -174,6 +174,27 @@ private fun SupView(node: Nat.Sup, style: NatStyle, signal: Int = -1) {
             exp.place(x = base.width, y = expTop.toInt())
         }
     }
+}
+
+/**
+ * 指数槽里「只包住一个分数」的括号隐去：分数横线本身就分组，
+ * 显示成 x^(2/3) 的堆叠分数，而不是带着一对多余括号。
+ */
+private fun supExpNode(n: Nat): Nat {
+    if (n !is Nat.Row) return n
+    val items = n.items
+    if (items.size < 3) return n
+    val first = items.first()
+    val last = items.last()
+    if (!(first is Nat.Sym && first.text == "(" && last is Nat.Sym && last.text == ")")) return n
+    val inner = items.subList(1, items.size - 1)
+    val hasFrac = inner.any { it is Nat.Frac }
+    val onlyFracAndCursor = inner.all { it is Nat.Frac || it is Nat.Cursor }
+    if (!hasFrac || !onlyFracAndCursor) return n
+    val out = Nat.Row(inner)
+    out.srcStart = inner.first().srcStart
+    out.srcEnd = inner.last().srcEnd
+    return out
 }
 
 /**
