@@ -6,6 +6,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -46,6 +47,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -1172,7 +1174,17 @@ private fun LcdScreen(vm: CalcViewModel, modifier: Modifier) {
     ) {
         StatusBar(vm)
         Spacer(Modifier.height(4.dp))
-        Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.TopStart) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .pointerInput(vm.expression) {
+                    detectTapGestures { off ->
+                        if (size.width > 0) vm.tapToCursor(off.x / size.width)
+                    }
+                },
+            contentAlignment = Alignment.TopStart,
+        ) {
             // 批次 K3-A：编辑态画闪烁光标；求值后（看结果）光标隐藏
             // K6：输入默认左上角起排（以前是贴着右下角）
             LcdMathLine(

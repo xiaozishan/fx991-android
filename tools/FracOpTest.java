@@ -152,6 +152,12 @@ public class FracOpTest {
         eq("× 键不在指数里造分数",
                 CursorModel.INSTANCE.insertOperator("e^x", 3, "×").getText(), "e^x×");
 
+        // 17) 积分方向键：被积式末尾 ▶ → 上限；上限 ◀ → 被积式末尾
+        Integer up = CursorModel.INSTANCE.integNavTarget("int(x,0,1)", 5, true);
+        check("被积式末尾 ▶ 到上限（pos=8）=> " + up, up != null && up == 8);
+        Integer back = CursorModel.INSTANCE.integNavTarget("int(x,0,1)", 8, false);
+        check("上限 ◀ 回被积式末尾（pos=5）=> " + back, back != null && back == 5);
+
         System.out.println("RESULT FracOpTest pass=" + pass + " fail=" + fail);
         if (fail > 0) System.exit(1);
     }

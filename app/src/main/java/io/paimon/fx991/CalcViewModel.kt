@@ -75,6 +75,12 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
     val natInput = io.paimon.fx991.ui.NatInput()
 
     fun moveCursorLeft() {
+        // 积分上限槽首按 ◀ → 回到被积式末尾（不跳进上下限）
+        val inInteg = io.paimon.fx991.ui.CursorModel.integNavTarget(expression, cursor, false)
+        if (inInteg != null) {
+            cursor = inInteg
+            return
+        }
         val next = io.paimon.fx991.ui.CursorModel.moveLeft(expression, cursor)
         // 光标循环：行首再往左 → 到行尾
         cursor = if (next == cursor && cursor == 0) expression.length else next
@@ -87,6 +93,12 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
             expression = exit.text
             cursor = exit.cursor
             refreshPreview()
+            return
+        }
+        // 被积式末尾按 ▶ → 积分上限（屏幕上方的槽）
+        val inInteg = io.paimon.fx991.ui.CursorModel.integNavTarget(expression, cursor, true)
+        if (inInteg != null) {
+            cursor = inInteg
             return
         }
         cursor = io.paimon.fx991.ui.CursorModel.moveRight(expression, cursor)
@@ -112,6 +124,13 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         cursor = io.paimon.fx991.ui.CursorModel.moveDown(expression, cursor)
+    }
+
+    /** 手指点 LCD 表达式：按横向比例把光标放到对应位置（手指触摸移光标） */
+    fun tapToCursor(fraction: Float) {
+        if (expression.isEmpty()) return
+        val f = fraction.coerceIn(0f, 1f)
+        cursor = Math.round(f * expression.length).coerceIn(0, expression.length)
     }
 
     var resultText by mutableStateOf("")

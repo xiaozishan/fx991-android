@@ -394,6 +394,46 @@ object CursorModel {
         return EditResult(wrapped, e + 2)
     }
 
+    /**
+     * 积分模板的方向键定位（按屏幕方位，不按源码顺序）：
+     *  · 被积式末尾按 ▶ → 积分上限（屏幕上方的那个槽）
+     *  · 上限槽首按 ◀ → 被积式末尾
+     * 上限 → 下限靠 ▼，由 moveVertical 处理。
+     */
+    fun integNavTarget(expr: String, pos: Int, toUpper: Boolean): Int? {
+        val p = clamp(expr, pos)
+        val root = try {
+            buildNat(expr)
+        } catch (_: Exception) {
+            return null
+        }
+        var hit: Int? = null
+        fun walk(n: Nat) {
+            when (n) {
+                is Nat.Row -> n.items.forEach { walk(it) }
+                is Nat.Frac -> {
+                    walk(n.n)
+                    walk(n.d)
+                }
+                is Nat.Sqrt -> walk(n.a)
+                is Nat.Sup -> {
+                    walk(n.base)
+                    walk(n.exp)
+                }
+                is Nat.Integ -> {
+                    if (toUpper && n.body.srcEnd == p && n.hi.srcStart >= 0) hit = n.hi.srcStart
+                    if (!toUpper && n.hi.srcStart >= 0 && n.hi.srcStart == p) hit = n.body.srcEnd
+                    walk(n.body)
+                    walk(n.lo)
+                    walk(n.hi)
+                }
+                else -> {}
+            }
+        }
+        walk(root)
+        return hit
+    }
+
     /** 离光标最近的指数槽（Nat.Sup.exp）源码区间；返回 (start, end)，end 为开区间 */
     private fun supExpSlotAt(expr: String, pos: Int): Pair<Int, Int>? {
         val root = try {
