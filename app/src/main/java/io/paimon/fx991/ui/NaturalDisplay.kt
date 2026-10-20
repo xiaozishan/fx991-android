@@ -123,14 +123,17 @@ private fun NatNodeView(node: Nat, style: NatStyle, signal: Int = -1) {
                 NatNodeView(node.lo, style.copy(size = style.size * 0.68f), signal)
             }
             NatNodeView(node.body, style, signal)
-            Text(
-                text = "dx",
-                color = style.color,
-                fontFamily = MonoFont,
-                fontSize = style.size,
-                fontWeight = if (style.bold) FontWeight.Bold else FontWeight.Normal,
-                maxLines = 1,
-            )
+            // dx 与被积式之间留一点间距：被积式末尾是分数时，dx 不会看起来像分母
+            Box(Modifier.padding(start = 5.dp)) {
+                Text(
+                    text = "dx",
+                    color = style.color,
+                    fontFamily = MonoFont,
+                    fontSize = style.size,
+                    fontWeight = if (style.bold) FontWeight.Bold else FontWeight.Normal,
+                    maxLines = 1,
+                )
+            }
         }
     }
 }
