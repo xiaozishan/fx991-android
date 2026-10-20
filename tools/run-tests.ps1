@@ -35,7 +35,8 @@ $suites = @(
     @{ name = "PhotoFormatsTest"; file = "tools\PhotoFormatsTest.java"; out = "$env:TEMP\fx991-t18" },
     @{ name = "InlineFuncTest"; file = "tools\InlineFuncTest.java"; out = "$env:TEMP\fx991-t19" },
     @{ name = "K3SymbolicTest"; file = "tools\K3SymbolicTest.java"; out = "$env:TEMP\fx991-t20" },
-    @{ name = "FracOpTest"; file = "tools\FracOpTest.java"; out = "$env:TEMP\fx991-t21" }
+    @{ name = "FracOpTest"; file = "tools\FracOpTest.java"; out = "$env:TEMP\fx991-t21" },
+    @{ name = "DmsLiteralTest"; file = "tools\DmsLiteralTest.java"; out = "$env:TEMP\fx991-t22" }
 )
 
 $failed = 0

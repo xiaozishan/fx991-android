@@ -47,6 +47,8 @@ sealed interface KeyAction {
     data class Template(val text: String, val cursorBack: Int) : KeyAction
     /** hyp：插入 sinh()；光标还停在双曲调用口时重复按 → sinh → cosh → tanh 循环 */
     data object HypCycle : KeyAction
+    /** °′″：按度 → 分 → 秒循环插入符号（不再插入 dms(,,) 函数） */
+    data object Dms : KeyAction
 
     // ---- 批次 B ----
     /** STO：存入变量（A–F / x / y / M）
@@ -184,7 +186,7 @@ fun keypadRows(): List<List<Key>> = listOf(
         Key("(\u2212)", KeyKind.FUNC, KeyAction.SignToggle,
             shift = SubKey("∠", ins("\u2220")),
             alpha = SubKey("a", ins("A"))),
-        Key("\u00B0\u2032\u2033", KeyKind.FUNC, KeyAction.Template("dms(,,)", 3),
+        Key("\u00B0\u2032\u2033", KeyKind.FUNC, KeyAction.Dms,
             shift = SubKey("FACT", ins("!")),
             alpha = SubKey("b", ins("B"))),
         Key("hyp", KeyKind.FUNC, KeyAction.HypCycle,

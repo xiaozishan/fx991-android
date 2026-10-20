@@ -288,6 +288,38 @@ object CursorModel {
         return depth == 0
     }
 
+    private val DMS_CHARS = setOf('\u00B0', '\u2032', '\u2033', '\'', '"')
+
+    /**
+     * °′″ 键：按度 → 分 → 秒循环插入符号。
+     * 往回扫到当前度分秒字面量的开头，看已有哪些符号再决定下一个。
+     */
+    fun insertDmsSeparator(expr: String, pos: Int): EditResult {
+        val p = clamp(expr, pos)
+        var s = p
+        while (s > 0) {
+            val ch = expr[s - 1]
+            if (ch.isDigit() || ch == '.' || ch in DMS_CHARS) s-- else break
+        }
+        var hasDeg = false
+        var hasMin = false
+        var hasSec = false
+        for (k in s until p) {
+            when (expr[k]) {
+                '\u00B0' -> hasDeg = true
+                '\u2032', '\'' -> hasMin = true
+                '\u2033', '"' -> hasSec = true
+            }
+        }
+        val next = when {
+            !hasDeg -> "\u00B0"   // °
+            !hasMin -> "\u2032"   // ′
+            !hasSec -> "\u2033"   // ″
+            else -> "\u00B0"
+        }
+        return insert(expr, p, next)
+    }
+
     /**
      * 主行分数键（K3-symbolic 修复）：插入 ÷。
      * 分子是空槽（行首 / 运算符 / 开括号 / 分隔符之后）时，光标留在分子空位

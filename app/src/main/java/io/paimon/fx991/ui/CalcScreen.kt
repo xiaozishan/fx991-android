@@ -72,8 +72,11 @@ import io.paimon.fx991.engine.SiPrefixes
 import io.paimon.fx991.engine.UnitConvert
 import io.paimon.fx991.engine.label
 
-const val APP_VERSION = "1.12.1-cursorfix"
-const val APP_REPO = "https://github.com/xiaozishan/workspace"
+import io.paimon.fx991.BuildConfig
+
+/** 运行期版本号直接取构建产物，避免硬编码与 versionName 脱节 */
+val APP_VERSION: String = BuildConfig.VERSION_NAME
+const val APP_REPO = "https://github.com/xiaozishan/fx991-android"
 
 @Composable
 fun CalcApp(vm: CalcViewModel = viewModel()) {
@@ -461,18 +464,6 @@ private fun SettingsPanel(vm: CalcViewModel) {
                 ) { Text("下载 ${info.tag}", fontSize = 13.sp, maxLines = 1) }
             }
         }
-        Spacer(Modifier.height(10.dp))
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column {
-                Text("启动时自动检查更新", color = c.chromeInk, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                Text("每 12 小时最多检查一次；有新版才提示", color = c.keyNeutralInk.copy(alpha = 0.65f), fontSize = 11.sp)
-            }
-            Switch(checked = vm.autoCheckUpdate, onCheckedChange = { vm.setAutoCheck(it) })
-        }
         Spacer(Modifier.height(6.dp))
         ApiSettingsSection(vm)
     }
@@ -758,7 +749,7 @@ private fun HelpPanel(vm: CalcViewModel) {
         BodyText("SOLVE（CALC 的 SHIFT 层）：solve(方程)，括号里直接写方程，如 solve(2x+3=7)；不带等号按 f(x)=0 求根。")
         BodyText("Limit（9 的 SHIFT 层）：lim(式, x→)，如 lim(sin(x)/x, 0)；左右极限不等会明说。")
         BodyText("CALC：calc(式) —— 按当前 x / y / 变量值代入求值。")
-        BodyText("°′″：dms(度, 分, 秒) → 十进制度，如 dms(1, 30, 0) = 1.5。")
+        BodyText("°′″：按一次插度、再按插分、三按插秒（如 12°34′56″）；dms(度, 分, 秒) 函数仍可用。")
         BodyText("hyp：插入 sinh()，光标还在调用口时重复按 → sinh / cosh / tanh 循环；反双曲直接写 asinh( 等。")
         BodyText("极坐标：用 ∠ 直接输入，例如 2∠60 得到直角坐标 1 + 1.732050808i；再按 S⇔D 可切回 r∠θ。")
         BodyText("Pol / Rec（+ − 的 SHIFT 层）：pol(x, y) 附注给 r、θ（S⇔D 切极坐标显示）；rec(r, θ) 给 x + yi。")
@@ -1163,13 +1154,17 @@ private fun LcdScreen(vm: CalcViewModel, modifier: Modifier) {
     ) {
         StatusBar(vm)
         Spacer(Modifier.height(4.dp))
-        Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.BottomStart) {
+        Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.TopStart) {
             // 批次 K3-A：编辑态画闪烁光标；求值后（看结果）光标隐藏
+            // K6：输入默认左上角起排（以前是贴着右下角）
             LcdMathLine(
                 expr = vm.expression,
                 style = NatStyle(lcdFont(vm.expression.length), c.lcdFg),
                 modifier = Modifier.fillMaxSize(),
                 cursor = if (vm.justEvaluated || vm.overlay != Overlay.NONE) -1 else vm.cursor,
+                align = Alignment.TopStart,
+                rowAlign = Alignment.Top,
+                initialScroll = 0,
             )
         }
         Spacer(Modifier.height(2.dp))

@@ -48,7 +48,7 @@ public class NatLayoutTest {
         check("NaturalDisplay.kt 不含 fillMaxWidth", !code.contains("fillMaxWidth"));
         check("分数线/上横线用 drawBehind 自绘（按实测 size.width）", code.contains("drawBehind") && code.contains("size.width"));
         check("LCD 行右对齐用 Box 的 End 对齐（非无限宽约束下的 Arrangement）",
-                code.contains("contentAlignment = Alignment.BottomEnd") && !code.contains("Arrangement.End"));
+                code.contains("align: Alignment = Alignment.BottomEnd") && code.contains("contentAlignment = align") && !code.contains("Arrangement.End"));
         check("分数宽度由内容自然包裹（自定义 measure 取较大者）", code.contains("maxOf(num.width, den.width)"));
 
         System.out.println();

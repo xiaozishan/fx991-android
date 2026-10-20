@@ -1,4 +1,4 @@
-﻿# 科学计算器（自然书写 LCD 复刻）· v1.12.4-fracop
+﻿# 科学计算器（自然书写 LCD 复刻）· v1.12.5-lcdtl
 
 Android 科学计算器（Kotlin + Jetpack Compose，界面交互参考一台科学计算器手机 App）。
 **不含任何品牌厂商的商标、logo、字体或官方图片资源** —— 全部 UI 与图标由代码绘制。

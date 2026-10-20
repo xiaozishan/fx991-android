@@ -135,6 +135,30 @@ internal class Lexer(private val src: String) {
                 break
             }
         }
+        // 度分秒字面量：12°34′56″ / 12°34′ / 12°
+        if (i < src.length && src[i] == '\u00B0') {
+            val degText = src.substring(start, i)
+            i++
+            var minText = ""
+            var secText = ""
+            if (i < src.length && src[i].isDigit()) {
+                val ms = i
+                while (i < src.length && (src[i].isDigit() || src[i] == '.')) i++
+                minText = src.substring(ms, i)
+                if (i < src.length && (src[i] == '\u2032' || src[i] == '\'')) i++
+            }
+            if (i < src.length && src[i].isDigit()) {
+                val ss = i
+                while (i < src.length && (src[i].isDigit() || src[i] == '.')) i++
+                secText = src.substring(ss, i)
+                if (i < src.length && (src[i] == '\u2033' || src[i] == '"')) i++
+            }
+            val d = degText.toDoubleOrNull() ?: 0.0
+            val m = minText.toDoubleOrNull() ?: 0.0
+            val s = secText.toDoubleOrNull() ?: 0.0
+            val v = d + m / 60.0 + s / 3600.0
+            return Token(Tok.NUM, java.math.BigDecimal.valueOf(v).stripTrailingZeros().toPlainString())
+        }
         return Token(Tok.NUM, src.substring(start, i))
     }
 

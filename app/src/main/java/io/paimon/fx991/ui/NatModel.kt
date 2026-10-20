@@ -136,8 +136,11 @@ internal fun dlex(src: String): List<DTok> {
             // 结果行渲染成 "x=i" / "−12i"（误导），这里作为行内符号画出来
             c == '\u00B1' -> { tok(DT.PM, "\u00B1", i, i + 1); i++ }
             c == '\u2220' -> { tok(DT.ANGLE, "\u2220", i, i + 1); i++ }
-            // 批次 G：导数撇号 f'(x) 在自然书写里原样画出
-            c == '\'' || c == '\u2032' -> { tok(DT.IDENT, "'", i, i + 1); i++ }
+            // 批次 G：导数撇号 f'(x)（ASCII '）；Unicode ′ ″ 留给度分秒
+            c == '\'' -> { tok(DT.IDENT, "'", i, i + 1); i++ }
+            c == '\u2032' -> { tok(DT.IDENT, "\u2032", i, i + 1); i++ }
+            c == '\u2033' -> { tok(DT.IDENT, "\u2033", i, i + 1); i++ }
+            c == '\u00B0' -> { tok(DT.IDENT, "\u00B0", i, i + 1); i++ }
             c in SUP_ALL || c == CH_SUP_MINUS -> {
                 val s = i
                 while (i < src.length && (src[i] in SUP_ALL || src[i] == CH_SUP_MINUS)) i++

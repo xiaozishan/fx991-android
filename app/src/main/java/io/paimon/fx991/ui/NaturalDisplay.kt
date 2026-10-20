@@ -296,12 +296,20 @@ private fun SqrtView(node: Nat.Sqrt, style: NatStyle, signal: Int = -1) {
  * - 初始滚到最右端：短表达式贴右对齐，超长表达式默认显示结尾、可向左滚动查看（不被截断）。
  */
 @Composable
-fun LcdMathLine(expr: String, style: NatStyle, modifier: Modifier = Modifier, cursor: Int = -1) {
-    val scroll = rememberScrollState(initial = Int.MAX_VALUE)
-    Box(modifier, contentAlignment = Alignment.BottomEnd) {
+fun LcdMathLine(
+    expr: String,
+    style: NatStyle,
+    modifier: Modifier = Modifier,
+    cursor: Int = -1,
+    align: Alignment = Alignment.BottomEnd,
+    rowAlign: Alignment.Vertical = Alignment.Bottom,
+    initialScroll: Int = Int.MAX_VALUE,
+) {
+    val scroll = rememberScrollState(initial = initialScroll)
+    Box(modifier, contentAlignment = align) {
         Row(
             modifier = Modifier.horizontalScroll(scroll),
-            verticalAlignment = Alignment.Bottom,
+            verticalAlignment = rowAlign,
         ) {
             NaturalView(expr, style, cursor = cursor)
         }

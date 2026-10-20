@@ -360,6 +360,7 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
             KeyAction.Sd -> cycleDisplay()
             KeyAction.FracFormat -> cycleDisplay()
             KeyAction.Fraction -> insertFractionKey()
+            KeyAction.Dms -> insertDmsKey()
             KeyAction.SignToggle -> insert("\u2212")
             KeyAction.Mode, KeyAction.Menu -> openOverlay(Overlay.MODE)
             KeyAction.Settings -> openOverlay(Overlay.SETTINGS)
@@ -437,6 +438,24 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         val r = io.paimon.fx991.ui.CursorModel.insertFraction(expression, cursor)
+        expression = r.text
+        cursor = r.cursor
+        histCursor = -1
+        solutionItems = emptyList()
+        resultNote = ""
+        refreshPreview()
+    }
+
+    /** °′″ 键：按度 → 分 → 秒循环，不再插入 dms(,,) 函数模板 */
+    private fun insertDmsKey() {
+        if (shouldRemainNewEntry()) {
+            expression = ""
+            cursor = 0
+            justEvaluated = false
+            resultText = ""
+            isError = false
+        }
+        val r = io.paimon.fx991.ui.CursorModel.insertDmsSeparator(expression, cursor)
         expression = r.text
         cursor = r.cursor
         histCursor = -1
@@ -1260,11 +1279,7 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
 
     private val updatePrefs = app.getSharedPreferences(UPDATE_PREFS, Context.MODE_PRIVATE)
 
-    /** 设置开关：启动时自动检查更新（默认开） */
-    var autoCheckUpdate by mutableStateOf(updatePrefs.getBoolean(KEY_UPDATE_AUTO, true))
-        private set
-
-    /** 手动检查进行中 / 结果文案（人话；自动检查失败时保持静默不写这里） */
+    /** 手动检查进行中 / 结果文案 */
     var updateCheckBusy by mutableStateOf(false)
         private set
     var updateCheckResult by mutableStateOf("")
@@ -1286,11 +1301,6 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
     var skippedVersionTag by mutableStateOf(updatePrefs.getString(KEY_UPDATE_SKIP, "") ?: "")
         private set
 
-    fun setAutoCheck(b: Boolean) {
-        autoCheckUpdate = b
-        updatePrefs.edit().putBoolean(KEY_UPDATE_AUTO, b).apply()
-    }
-
     fun dismissUpdate() {
         updateDismissedTag = updateAvailable?.tag ?: ""
     }
@@ -1304,40 +1314,16 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
         updatePrefs.edit().putString(KEY_UPDATE_SKIP, tag).apply()
     }
 
-    /** 启动时静默检查：开关关 → 直接返回；12 小时窗口内 → 不请求，用缓存结果决定是否提示 */
-    fun autoCheckUpdateIfDue() {
-        if (!autoCheckUpdate) return
-        val last = updatePrefs.getLong(KEY_UPDATE_AT, 0L)
-        if (!UpdateCheck.dueForAutoCheck(last, System.currentTimeMillis())) {
-            val cachedTag = updatePrefs.getString(KEY_UPDATE_TAG, "") ?: ""
-            if (cachedTag.isNotEmpty() && cachedTag != skippedVersionTag &&
-                UpdateCheck.isNewer(cachedTag, APP_VERSION)
-            ) {
-                updateAvailable = ReleaseInfo(
-                    tag = cachedTag,
-                    version = cachedTag.removePrefix("v").removePrefix("V"),
-                    pageUrl = updatePrefs.getString(KEY_UPDATE_PAGE, "") ?: "",
-                    apkUrl = updatePrefs.getString(KEY_UPDATE_APK, "") ?: "",
-                    title = "",
-                    notes = updatePrefs.getString(KEY_UPDATE_NOTES, "") ?: "",
-                    apkSize = updatePrefs.getLong(KEY_UPDATE_SIZE, 0L),
-                )
-            }
-            return
-        }
-        fetchUpdate(auto = true)
-    }
-
-    /** 设置页「立即检查」：不受 12 小时窗口限制 */
+    /** 设置页「立即检查」（唯一入口：不再开机自动检查） */
     fun checkUpdateNow() {
         if (updateCheckBusy) return
-        fetchUpdate(auto = false)
+        fetchUpdate()
     }
 
-    private fun fetchUpdate(auto: Boolean) {
+    private fun fetchUpdate() {
         if (updateCheckBusy) return
         updateCheckBusy = true
-        if (!auto) updateCheckResult = ""
+        updateCheckResult = ""
         viewModelScope.launch {
             val r = withContext(Dispatchers.IO) {
                 try {
@@ -1360,8 +1346,7 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
                     .apply()
                 latestVersionText = info.tag
                 if (UpdateCheck.isNewer(info.tag, APP_VERSION)) {
-                    // 手动检查时即使跳过了也照实回显；自动检查则尊重「跳过此版本」
-                    updateAvailable = if (auto && info.tag == skippedVersionTag) null else info
+                    updateAvailable = info
                     updateCheckResult = "发现新版本 ${info.tag}（当前 $APP_VERSION）"
                 } else {
                     updateAvailable = null
@@ -1372,17 +1357,8 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
                 if (e !is UpdateNetException) {
                     updatePrefs.edit().putLong(KEY_UPDATE_AT, System.currentTimeMillis()).apply()
                 }
-                // 自动检查失败静默；手动检查给人话
-                if (!auto) updateCheckResult = e.message ?: "检查失败，请稍后再试"
+                updateCheckResult = e.message ?: "检查失败，请稍后再试"
             }
-        }
-    }
-
-    init {
-        // 启动静默检查：延后 5 秒、协程 IO，不阻塞 UI、不抢焦点；只在有新版时才弹提示
-        viewModelScope.launch {
-            delay(5000)
-            autoCheckUpdateIfDue()
         }
     }
 

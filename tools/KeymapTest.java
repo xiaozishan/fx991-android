@@ -134,7 +134,7 @@ public class KeymapTest {
 
         System.out.println("-- 第 5 排：(−) · °′″ · hyp · sin · cos · tan --");
         key(rows, 3, 0, "(" + MINUS + ")", "SignToggle", ANG, "ins:" + ANG, "a", "ins:A");
-        key(rows, 3, 1, DMS, "tpl:dms(,,)@3", "FACT", "ins:!", "b", "ins:B");
+        key(rows, 3, 1, DMS, "Dms", "FACT", "ins:!", "b", "ins:B");
         key(rows, 3, 2, "hyp", "HypCycle", "|x|", "ins:abs(", "c", "ins:C");
         key(rows, 3, 3, "sin", "ins:sin(", "sin" + RECIP, "ins:sin" + RECIP + "(", "d", "ins:D");
         key(rows, 3, 4, "cos", "ins:cos(", "cos" + RECIP, "ins:cos" + RECIP + "(", "e", "ins:E");
