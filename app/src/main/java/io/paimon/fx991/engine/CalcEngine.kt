@@ -101,8 +101,10 @@ internal class Lexer(private val src: String) {
                 c == '\u00B7' -> { out.add(Token(Tok.DOT, "\u00B7")); i++ }
                 // 批次 K4：∞ 无穷符号（Limit 等场景插入；按 IDENT 走，parser 映射为正无穷）
                 c == '\u221E' -> { out.add(Token(Tok.IDENT, "\u221E")); i++ }
-                // 批次 G：导数撇号 f'(x)（′ 与 ' 等价）
-                c == '\'' || c == '\u2032' -> { out.add(Token(Tok.PRIME, "'")); i++ }
+                // 批次 G：导数撇号 f'(x)（ASCII '）；Unicode ′ ″ 是度分秒符号，
+                // 没有跟在数字后面（如误触多按一次 °′″）时直接跳过，不报语法错误
+                c == '\'' -> { out.add(Token(Tok.PRIME, "'")); i++ }
+                c == '\u2032' || c == '\u2033' -> i++
                 c == CH_SQRT -> { out.add(Token(Tok.SQRT, "\u221A")); i++ }
                 c == CH_SQ2 -> { out.add(Token(Tok.SQ2, "\u00B2")); i++ }
                 c == CH_CUBE -> { out.add(Token(Tok.CUBE, "\u00B3")); i++ }

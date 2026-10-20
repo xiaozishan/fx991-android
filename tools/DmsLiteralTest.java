@@ -75,6 +75,16 @@ public class DmsLiteralTest {
         near("1°30′ + 0.5 = 2", eval("1" + DEG_CH + "30" + MIN_CH + "+0.5"), 2.0, 1e-12);
         near("旧函数仍可用 dms(1,30,0)", evalUnified("dms(1,30,0)"), 1.5, 1e-12);
 
+        // ---- 容错：符号连按 / 旧输入里的 °′ 残渣不能报错 ----
+        near("3.5°′ = 3.5（多按一次分）", eval("3.5" + DEG_CH + MIN_CH), 3.5, 1e-12);
+        near("3.5°′″ = 3.5（多按两次）", eval("3.5" + DEG_CH + MIN_CH + SEC_CH), 3.5, 1e-12);
+        near("sin⁻¹(1.5×sin(3.5°′)) 不报错",
+                eval("sin\u207B\u00B9(1.5" + "\u00D7" + "sin(3.5" + DEG_CH + MIN_CH + "))"), 5.25409612, 1e-6);
+
+        // ---- 连按分隔键：度 → 分 可以连按（中途再输数字），引擎容忍空分钟 ----
+        eq("° 后连按 → 插入 ′（分）",
+                CursorModel.INSTANCE.insertDmsSeparator("3.5" + DEG_CH, 4).getText(), "3.5" + DEG_CH + MIN_CH);
+
         System.out.println("RESULT DmsLiteralTest pass=" + pass + " fail=" + fail);
         if (fail > 0) System.exit(1);
     }
