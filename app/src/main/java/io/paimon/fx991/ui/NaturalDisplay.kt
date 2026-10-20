@@ -106,12 +106,7 @@ private fun NatNodeView(node: Nat, style: NatStyle, signal: Int = -1) {
 
         is Nat.Sqrt -> SqrtView(node, style, signal)
 
-        is Nat.Sup -> Row(verticalAlignment = Alignment.Top) {
-            NatNodeView(node.base, style, signal)
-            Box(Modifier.padding(bottom = (style.size.value * 0.35f).dp)) {
-                NatNodeView(node.exp, style.copy(size = style.size * 0.68f), signal)
-            }
-        }
+        is Nat.Sup -> SupView(node, style, signal)
 
         // 批次 K3：定积分模板 —— ∫ 右上是上限、右下是下限，被积式随后，末尾 dx
         is Nat.Integ -> Row(verticalAlignment = Alignment.CenterVertically) {
@@ -136,6 +131,47 @@ private fun NatNodeView(node: Nat, style: NatStyle, signal: Int = -1) {
                 fontWeight = if (style.bold) FontWeight.Bold else FontWeight.Normal,
                 maxLines = 1,
             )
+        }
+    }
+}
+
+/**
+ * 上标：指数贴在**基数的右上角**（基线抬高 ≈0.42 em、字号 0.62 倍）。
+ *
+ * 旧实现用 Row(Top) + 底部 padding 造“抬高”，padding 走 dp 而字号是 sp ——
+ * 一旦系统字体缩放不为 1，换算就失真，指数会落回基线中央（看起来像行内居中）。
+ * 这里改用自定义 Layout：按实际测量的字高推基线，用量出来的 px 精确抬升。
+ */
+@Composable
+private fun SupView(node: Nat.Sup, style: NatStyle, signal: Int = -1) {
+    val density = LocalDensity.current
+    val expStyle = style.copy(size = style.size * 0.62f)
+    val raisePx = style.size.value * 0.42f * density.density * density.fontScale
+
+    Layout(
+        content = {
+            Box { NatNodeView(node.base, style, signal) }
+            Box { NatNodeView(node.exp, expStyle, signal) }
+        },
+    ) { measurables, constraints ->
+        val relaxed = constraints.copy(minWidth = 0, minHeight = 0)
+        val base = measurables[0].measure(relaxed)
+        val exp = measurables[1].measure(relaxed)
+        // 行内基线大约在行高的 80% 处（Compose Text 默认行高 ≈ 1.2 em）
+        val baseBaseline = base.height * 0.80f
+        val expBaseline = exp.height * 0.80f
+        var expTop = baseBaseline - raisePx - expBaseline
+        var baseTop = 0f
+        if (expTop < 0f) {
+            // 指数高出顶边时整体下移，保证不裁切
+            baseTop = -expTop
+            expTop = 0f
+        }
+        val w = base.width + exp.width
+        val h = maxOf(baseTop + base.height, expTop + exp.height).toInt()
+        layout(w, h) {
+            base.place(x = 0, y = baseTop.toInt())
+            exp.place(x = base.width, y = expTop.toInt())
         }
     }
 }
