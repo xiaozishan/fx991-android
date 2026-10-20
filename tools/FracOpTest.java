@@ -122,6 +122,16 @@ public class FracOpTest {
         // 13) 普通位置不受影响
         eq("非指数位置仍插 ÷", CursorModel.INSTANCE.insertFraction("12", 2).getText(), "12" + DIV);
 
+        // 14) 空指数：x^ 后直接按分数键（用户最常走的路）
+        EditResult e2 = CursorModel.INSTANCE.insertFraction("x^", 2);
+        eq("x^ 后按分数键 → x^(÷)", e2.getText(), "x^(" + DIV + ")");
+        check("光标留在分子 => " + e2.getCursor(), e2.getCursor() == 3);
+        eq("输 3 → x^(3÷)", type2(e2, "3").getText(), "x^(3" + DIV + ")");
+        EditResult r3 = type2(e2, "3");
+        EditResult mv = new EditResult(r3.getText(), CursorModel.INSTANCE.moveRight(r3.getText(), r3.getCursor()));
+        eq("▶ 到分母后输 2 → x^(3÷2)", type2(mv, "2").getText(), "x^(3" + DIV + "2)");
+        near("8^(3÷2) = 22.6274", CalcEngine.INSTANCE.evaluate("8^(3" + DIV + "2)", AngleMode.DEG, 0.0, 0.0), 22.62741699, 1e-6);
+
         System.out.println("RESULT FracOpTest pass=" + pass + " fail=" + fail);
         if (fail > 0) System.exit(1);
     }

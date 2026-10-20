@@ -330,30 +330,37 @@ object CursorModel {
         // 指数槽里按分数键：把指数内容包一层括号再插 ÷，分数要留在指数里，
         // 否则 ÷ 会按乘法/除法优先级掉到基线下（x^2÷3 = (x^2)÷3）
         val expSpan = supExpSlotAt(expr, p)
-        if (expSpan != null && p > expSpan.first) {
+        if (expSpan != null) {
             val s = expSpan.first
-            val e = expSpan.last + 1
-            val content = expr.substring(s, e)
-            if (isWholeParenGroup(content)) {
-                val at = if (p >= e) e - 1 else p
-                return insert(expr, at, "÷")
+            val e = expSpan.second            // 开区间（end 不含）
+            // 空指数（x^ 之后直接按分数键）：造一个带括号的空分数，光标留在分子
+            if (s == e && p == s) {
+                val text = expr.substring(0, s) + "(÷)" + expr.substring(s)
+                return EditResult(text, s + 1)
             }
-            val wrapped = expr.substring(0, s) + "(" + content + ")" + expr.substring(e)
-            return insert(wrapped, p + 1, "÷")
+            if (p > s && e > s) {
+                val content = expr.substring(s, e)
+                if (isWholeParenGroup(content)) {
+                    val at = if (p >= e) e - 1 else p
+                    return insert(expr, at, "÷")
+                }
+                val wrapped = expr.substring(0, s) + "(" + content + ")" + expr.substring(e)
+                return insert(wrapped, p + 1, "÷")
+            }
         }
         val r = insert(expr, p, "÷")
         val emptyNum = p == 0 || expr[p - 1] in "+−×÷^(,=;∠·±"
         return if (emptyNum) EditResult(r.text, p) else r
     }
 
-    /** 离光标最近的指数槽（Nat.Sup.exp）源码区间 */
-    private fun supExpSlotAt(expr: String, pos: Int): IntRange? {
+    /** 离光标最近的指数槽（Nat.Sup.exp）源码区间；返回 (start, end)，end 为开区间 */
+    private fun supExpSlotAt(expr: String, pos: Int): Pair<Int, Int>? {
         val root = try {
             buildNat(expr)
         } catch (_: Exception) {
             return null
         }
-        var best: IntRange? = null
+        var best: Pair<Int, Int>? = null
         fun walk(n: Nat) {
             when (n) {
                 is Nat.Row -> n.items.forEach { if (inSpan(it, pos)) walk(it) }
@@ -364,10 +371,9 @@ object CursorModel {
                 is Nat.Sqrt -> if (inSpan(n.a, pos)) walk(n.a)
                 is Nat.Sup -> {
                     if (inSpan(n.base, pos)) walk(n.base)
-                    if (inSpan(n.exp, pos)) {
-                        if (n.exp.srcStart >= 0 && n.exp.srcEnd > n.exp.srcStart) {
-                            best = n.exp.srcStart until n.exp.srcEnd
-                        }
+                    if (n.exp.srcStart >= 0 && pos >= n.exp.srcStart && pos <= n.exp.srcEnd) {
+                        // 空指数（刚按下 ^）也要认：start == end
+                        best = n.exp.srcStart to n.exp.srcEnd
                         walk(n.exp)
                     }
                 }
