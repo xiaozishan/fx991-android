@@ -30,6 +30,8 @@ data class CalculatorSettings(
     val vibration: Boolean = true,
     // ---- 批次 B：数字显示模式（普通 / 科学记数 / 工程记数），与 ENG 键联动 ----
     val notation: NumberNotation = NumberNotation.NORM,
+    // ---- 批次 K7：结果按度分秒（°′″）输出 ----
+    val dmsOutput: Boolean = false,
 )
 
 // ---------------------------------------------------------------------------

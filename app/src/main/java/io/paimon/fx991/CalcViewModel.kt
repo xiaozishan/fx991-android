@@ -277,6 +277,13 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
         reformatResult()
     }
 
+    /** 结果按度分秒（°′″）输出 */
+    fun setDmsOutput(b: Boolean) {
+        settings = settings.copy(dmsOutput = b)
+        reformatResult()
+        refreshPreview()
+    }
+
     /** Ran#：插入一个 0–1 均匀随机数 */
     fun insertRandom() {
         insert(CalcEngine.format(RandomOps.uniform(), 10, null))
@@ -1016,8 +1023,13 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
     )
 
     /** 预估值 / 对话框里的纯浮点显示 */
-    fun formatNumber(v: Double): String =
-        CalcEngine.format(v, settings.sigDigits, fixDecimals(), settings.notation)
+    fun formatNumber(v: Double): String {
+        // 度分秒输出模式：任何标量都按 度°分′秒″ 显示（与真机 DMS 显示一致）
+        if (settings.dmsOutput && v.isFinite() && abs(v) < 1e15) {
+            return Sexagesimal.fromDegrees(v).toString()
+        }
+        return CalcEngine.format(v, settings.sigDigits, fixDecimals(), settings.notation)
+    }
 
     /** 当前角度制的单位后缀 */
     private fun angleUnit(): String = when (angleMode) {

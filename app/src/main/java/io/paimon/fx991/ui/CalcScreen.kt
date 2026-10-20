@@ -409,6 +409,24 @@ private fun SettingsPanel(vm: CalcViewModel) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column {
+                Text("度分秒输出", color = c.chromeInk, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    "结果按 12°34′56″ 显示；关闭则用十进制",
+                    color = c.keyNeutralInk.copy(alpha = 0.65f), fontSize = 11.sp,
+                )
+            }
+            Switch(checked = vm.settings.dmsOutput, onCheckedChange = { vm.setDmsOutput(it) })
+        }
+        Spacer(Modifier.height(8.dp))
+        HorizontalDivider(color = c.keyEdge)
+        Spacer(Modifier.height(14.dp))
+
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column {
                 Text("按键震动", color = c.chromeInk, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 Text("按下按键时的触感反馈", color = c.keyNeutralInk.copy(alpha = 0.65f), fontSize = 11.sp)
             }
