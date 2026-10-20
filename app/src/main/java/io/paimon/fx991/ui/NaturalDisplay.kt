@@ -8,6 +8,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -87,7 +89,18 @@ private fun CursorGlyph(style: NatStyle, signal: Int) {
 @Composable
 private fun NatNodeView(node: Nat, style: NatStyle, signal: Int = -1) {
     when (node) {
-        is Nat.Sym -> Text(
+        is Nat.Sym -> if (node.text.isEmpty()) {
+            // 空槽位（分数分子/分母、空指数…）：画一个小方框，提示这里可以输入
+            val w = (style.size.value * 0.46f).dp
+            val h = (style.size.value * 0.86f).dp
+            Box(
+                Modifier
+                    .padding(horizontal = (style.size.value * 0.07f).dp)
+                    .width(w)
+                    .height(h)
+                    .border(1.dp, style.color.copy(alpha = 0.45f), RoundedCornerShape(2.dp))
+            )
+        } else Text(
             text = natDisplayName(node.text),
             color = style.color,
             fontFamily = MonoFont,

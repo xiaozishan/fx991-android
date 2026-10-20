@@ -75,7 +75,9 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
     val natInput = io.paimon.fx991.ui.NatInput()
 
     fun moveCursorLeft() {
-        cursor = io.paimon.fx991.ui.CursorModel.moveLeft(expression, cursor)
+        val next = io.paimon.fx991.ui.CursorModel.moveLeft(expression, cursor)
+        // 光标循环：行首再往左 → 到行尾
+        cursor = if (next == cursor && cursor == 0) expression.length else next
     }
 
     fun moveCursorRight() {
@@ -88,6 +90,11 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         cursor = io.paimon.fx991.ui.CursorModel.moveRight(expression, cursor)
+        // 光标循环：行尾再往右 → 到行首
+        if (cursor >= expression.length && expression.isNotEmpty()) {
+            val atEnd = io.paimon.fx991.ui.CursorModel.moveRight(expression, cursor) == cursor
+            if (atEnd) cursor = 0
+        }
     }
 
     /** 批次 K3-symbolic：方向键上下 = 二维结构内垂直移光标（分数分子↔分母、上标↔基线、根号内外、∫上下限） */
