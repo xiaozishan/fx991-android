@@ -79,6 +79,14 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun moveCursorRight() {
+        // 指数末尾按 ▶：移到正常行内（自动补括号保证语义）
+        val exit = io.paimon.fx991.ui.CursorModel.exitSupIfAtEnd(expression, cursor)
+        if (exit != null) {
+            expression = exit.text
+            cursor = exit.cursor
+            refreshPreview()
+            return
+        }
         cursor = io.paimon.fx991.ui.CursorModel.moveRight(expression, cursor)
     }
 
@@ -88,6 +96,14 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun moveCursorDown() {
+        // 指数里按 ▼：同样退出到正常行内
+        val exit = io.paimon.fx991.ui.CursorModel.exitSupIfAtEnd(expression, cursor)
+        if (exit != null && io.paimon.fx991.ui.CursorModel.moveDown(expression, cursor) == cursor) {
+            expression = exit.text
+            cursor = exit.cursor
+            refreshPreview()
+            return
+        }
         cursor = io.paimon.fx991.ui.CursorModel.moveDown(expression, cursor)
     }
 

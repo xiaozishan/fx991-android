@@ -353,6 +353,22 @@ object CursorModel {
         return if (emptyNum) EditResult(r.text, p) else r
     }
 
+    /**
+     * 指数末尾按 ▶ / ▼：把指数包进括号，光标移到 ')' 后面——
+     * 这样继续输入就回到正常行内，而不是继续往指数里追加字符。
+     */
+    fun exitSupIfAtEnd(expr: String, pos: Int): EditResult? {
+        val p = clamp(expr, pos)
+        val exp = supExpSlotAt(expr, p) ?: return null
+        val s = exp.first
+        val e = exp.second
+        if (e == s || p != e) return null
+        val content = expr.substring(s, e)
+        if (isWholeParenGroup(content)) return null   // 已在括号外，无需处理
+        val wrapped = expr.substring(0, s) + "(" + content + ")" + expr.substring(e)
+        return EditResult(wrapped, e + 2)
+    }
+
     /** 离光标最近的指数槽（Nat.Sup.exp）源码区间；返回 (start, end)，end 为开区间 */
     private fun supExpSlotAt(expr: String, pos: Int): Pair<Int, Int>? {
         val root = try {

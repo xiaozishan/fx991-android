@@ -132,6 +132,14 @@ public class FracOpTest {
         eq("▶ 到分母后输 2 → x^(3÷2)", type2(mv, "2").getText(), "x^(3" + DIV + "2)");
         near("8^(3÷2) = 22.6274", CalcEngine.INSTANCE.evaluate("8^(3" + DIV + "2)", AngleMode.DEG, 0.0, 0.0), 22.62741699, 1e-6);
 
+        // 15) 指数末尾退出到正常行内
+        EditResult x1 = CursorModel.INSTANCE.exitSupIfAtEnd("x^2", 3);
+        check("x^2 末尾按 ▶ 会补括号退出", x1 != null && x1.getText().equals("x^(2)") && x1.getCursor() == 5);
+        check("非末尾不触发退出", CursorModel.INSTANCE.exitSupIfAtEnd("x^2", 2) == null);
+        check("已是括号指数不再处理", CursorModel.INSTANCE.exitSupIfAtEnd("x^(2)", 5) == null);
+        check("空指数不处理", CursorModel.INSTANCE.exitSupIfAtEnd("x^", 2) == null);
+        near("退出后接 +1 在行内", CalcEngine.INSTANCE.evaluate("4^(1)+1", AngleMode.DEG, 0.0, 0.0), 5.0, 1e-9);
+
         System.out.println("RESULT FracOpTest pass=" + pass + " fail=" + fail);
         if (fail > 0) System.exit(1);
     }

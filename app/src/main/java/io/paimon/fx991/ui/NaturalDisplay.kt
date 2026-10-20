@@ -191,9 +191,10 @@ private fun supExpNode(n: Nat): Nat {
     val last = items.last()
     if (!(first is Nat.Sym && first.text == "(" && last is Nat.Sym && last.text == ")")) return n
     val inner = items.subList(1, items.size - 1)
-    val hasFrac = inner.any { it is Nat.Frac }
-    val onlyFracAndCursor = inner.all { it is Nat.Frac || it is Nat.Cursor }
-    if (!hasFrac || !onlyFracAndCursor) return n
+    val atoms = inner.filter { it !is Nat.Cursor }
+    // 只包住一个原子（数字/变量/分数）时隐去括号：x^(2) 仍显示成 x²
+    val singleAtom = atoms.size == 1 && (atoms[0] is Nat.Sym || atoms[0] is Nat.Frac)
+    if (!singleAtom) return n
     val out = Nat.Row(inner)
     out.srcStart = inner.first().srcStart
     out.srcEnd = inner.last().srcEnd
