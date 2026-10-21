@@ -647,9 +647,125 @@ fun buildNatCursor(expr: String, cursor: Int): Nat {
 fun buildNatCursor(expr: String, cursor: Int, cursorExit: Int): Nat {
     val root = buildNat(expr)
     val p = cursor.coerceIn(0, expr.length)
-    if (cursorExit > 0 && p == 0) return Nat.Row(listOf(Nat.Cursor, root))
-    if (cursorExit > 0 && p >= expr.length) return Nat.Row(listOf(root, Nat.Cursor))
+    if (cursorExit <= 0) return placeCursor(root, p)
+
+    // 光标在某个结构的右边界外：把这个结构整体包一层，光标画在父层级（结构外面）
+    val ends = ArrayList<Nat>()
+    collectEnds(root, p, ends)
+    ends.sortByDescending { it.srcStart }
+    ends.getOrNull(cursorExit - 1)?.let { target ->
+        wrapNode(root, target, before = false)?.let { return it }
+    }
+
+    // 左边界外
+    val starts = ArrayList<Nat>()
+    collectStarts(root, p, starts)
+    starts.sortBy { it.srcEnd }
+    starts.getOrNull(cursorExit - 1)?.let { target ->
+        wrapNode(root, target, before = true)?.let { return it }
+    }
+
     return placeCursor(root, p)
+}
+
+private fun collectEnds(n: Nat, p: Int, out: MutableList<Nat>) {
+    when (n) {
+        is Nat.Row -> n.items.forEach { collectEnds(it, p, out) }
+        is Nat.Frac -> {
+            collectEnds(n.n, p, out)
+            collectEnds(n.d, p, out)
+            if (n.srcEnd == p) out.add(n)
+        }
+        is Nat.Sup -> {
+            collectEnds(n.base, p, out)
+            collectEnds(n.exp, p, out)
+            if (n.srcEnd == p) out.add(n)
+        }
+        is Nat.Sqrt -> {
+            collectEnds(n.a, p, out)
+            if (n.srcEnd == p) out.add(n)
+        }
+        is Nat.Integ -> {
+            collectEnds(n.body, p, out)
+            collectEnds(n.lo, p, out)
+            collectEnds(n.hi, p, out)
+            if (n.srcEnd == p) out.add(n)
+        }
+        else -> Unit
+    }
+}
+
+private fun collectStarts(n: Nat, p: Int, out: MutableList<Nat>) {
+    when (n) {
+        is Nat.Row -> n.items.forEach { collectStarts(it, p, out) }
+        is Nat.Frac -> {
+            collectStarts(n.n, p, out)
+            collectStarts(n.d, p, out)
+            if (n.srcStart == p) out.add(n)
+        }
+        is Nat.Sup -> {
+            collectStarts(n.base, p, out)
+            collectStarts(n.exp, p, out)
+            if (n.srcStart == p) out.add(n)
+        }
+        is Nat.Sqrt -> {
+            collectStarts(n.a, p, out)
+            if (n.srcStart == p) out.add(n)
+        }
+        is Nat.Integ -> {
+            collectStarts(n.body, p, out)
+            collectStarts(n.lo, p, out)
+            collectStarts(n.hi, p, out)
+            if (n.srcStart == p) out.add(n)
+        }
+        else -> Unit
+    }
+}
+
+/** 把 target 节点换成 Row(target, Cursor) 或 Row(Cursor, target)；找不到返回 null */
+private fun wrapNode(n: Nat, target: Nat, before: Boolean): Nat? {
+    if (n === target) {
+        val row = if (before) Nat.Row(listOf(Nat.Cursor, n)) else Nat.Row(listOf(n, Nat.Cursor))
+        row.srcStart = n.srcStart
+        row.srcEnd = n.srcEnd
+        return row
+    }
+    fun rep(c: Nat): Nat? = wrapNode(c, target, before)
+    return when (n) {
+        is Nat.Row -> {
+            var changed = false
+            val items = n.items.map { c ->
+                val r = rep(c)
+                if (r != null) { changed = true; r } else c
+            }
+            if (!changed) null else Nat.Row(items).also { it.srcStart = n.srcStart; it.srcEnd = n.srcEnd }
+        }
+        is Nat.Frac -> {
+            val a = rep(n.n)
+            val b = rep(n.d)
+            if (a == null && b == null) null
+            else Nat.Frac(a ?: n.n, b ?: n.d).also { it.srcStart = n.srcStart; it.srcEnd = n.srcEnd }
+        }
+        is Nat.Sup -> {
+            val a = rep(n.base)
+            val b = rep(n.exp)
+            if (a == null && b == null) null
+            else Nat.Sup(a ?: n.base, b ?: n.exp).also { it.srcStart = n.srcStart; it.srcEnd = n.srcEnd }
+        }
+        is Nat.Sqrt -> {
+            val a = rep(n.a) ?: return null
+            Nat.Sqrt(a).also { it.srcStart = n.srcStart; it.srcEnd = n.srcEnd }
+        }
+        is Nat.Integ -> {
+            val a = rep(n.body)
+            val b = rep(n.lo)
+            val c = rep(n.hi)
+            if (a == null && b == null && c == null) null
+            else Nat.Integ(a ?: n.body, b ?: n.lo, c ?: n.hi)
+                .also { it.srcStart = n.srcStart; it.srcEnd = n.srcEnd }
+        }
+        else -> null
+    }
 }
 
 /**
