@@ -1414,42 +1414,58 @@ private fun KeypadDeck(vm: CalcViewModel, modifier: Modifier, rowHeight: Dp? = n
     val rows = remember { keypadRows() }
     val click = rememberKeyClick(vm)
     Column(modifier.padding(start = 4.dp, end = 4.dp, top = 3.dp, bottom = 5.dp)) {
-        rows.forEach { row ->
-            // rowHeight != null 时走紧凑布局（固定行高，整体可滚动）；否则撑满剩余高度（权重布局）
-            // 方向键那一行给更高的权重，五向键才有足够触控面积
-            val rowWeight = if (row.any { it.kind == KeyKind.NAV }) 1.38f else 1f
-            val rowModifier = if (rowHeight != null) {
-                Modifier.fillMaxWidth().height(rowHeight)
+        // ---- 第 1、2 排合并：方向键跨两排，四个功能键分列左右两侧 ----
+        if (rows.size >= 2) {
+            val top = rows[0]
+            val bottom = rows[1]
+            val topSides = top.filter { it.kind != KeyKind.NAV }
+            val leftTop = topSides.take(2)          // SHIFT / ALPHA
+            val rightTop = topSides.drop(2)         // MODE / 2nd
+            val leftBottom = bottom.take(2)         // CALC / ∫dx
+            val rightBottom = bottom.drop(2)        // x⁻¹ / logₓy
+            val blockModifier = if (rowHeight != null) {
+                Modifier.fillMaxWidth().height(rowHeight * 2f)
             } else {
-                Modifier.fillMaxWidth().weight(rowWeight)
+                Modifier.fillMaxWidth().weight(2f)
             }
-            Row(rowModifier) {
-                row.forEach { key ->
-                    if (key.kind == KeyKind.NAV) {
-                        DPad(
-                            click = click,
-                            modifier = Modifier
-                                .weight(key.weight)
-                                .fillMaxHeight()
-                                .padding(2.dp)
-                        )
-                    } else {
-                        KeyCapButton(
-                            key = key,
-                            modifier = Modifier
-                                .weight(key.weight)
-                                .fillMaxHeight()
-                                .padding(2.dp),
-                            onClick = { click(key) },
-                            onHold = key.hold?.let { h ->
-                                { click(Key(key.label, key.kind, h.action)) }
-                            },
-                        )
-                    }
+            Row(blockModifier) {
+                Column(Modifier.weight(2f).fillMaxHeight()) {
+                    Row(Modifier.weight(1f)) { leftTop.forEach { KeyCell(it, click) } }
+                    Row(Modifier.weight(1f)) { leftBottom.forEach { KeyCell(it, click) } }
+                }
+                DPad(
+                    click = click,
+                    // 高度已经翻倍，宽度收到 2.2 单位，整体接近方形
+                    modifier = Modifier.weight(2.2f).fillMaxHeight().padding(2.dp),
+                )
+                Column(Modifier.weight(2f).fillMaxHeight()) {
+                    Row(Modifier.weight(1f)) { rightTop.forEach { KeyCell(it, click) } }
+                    Row(Modifier.weight(1f)) { rightBottom.forEach { KeyCell(it, click) } }
                 }
             }
         }
+        // ---- 其余各行照常 ----
+        rows.drop(2).forEach { row ->
+            val rowModifier = if (rowHeight != null) {
+                Modifier.fillMaxWidth().height(rowHeight)
+            } else {
+                Modifier.fillMaxWidth().weight(1f)
+            }
+            Row(rowModifier) {
+                row.forEach { key -> KeyCell(key, click) }
+            }
+        }
     }
+}
+
+@Composable
+private fun androidx.compose.foundation.layout.RowScope.KeyCell(key: Key, click: (Key) -> Unit) {
+    KeyCapButton(
+        key = key,
+        modifier = Modifier.weight(key.weight).fillMaxHeight().padding(2.dp),
+        onClick = { click(key) },
+        onHold = key.hold?.let { h -> { click(Key(key.label, key.kind, h.action)) } },
+    )
 }
 
 @Composable
