@@ -1257,6 +1257,7 @@ private fun LcdScreen(vm: CalcViewModel, modifier: Modifier) {
                 style = NatStyle(lcdFont(vm.expression.length), c.lcdFg),
                 modifier = Modifier.fillMaxSize(),
                 cursor = if (vm.justEvaluated || vm.overlay != Overlay.NONE) -1 else vm.cursor,
+                cursorExit = if (vm.justEvaluated || vm.overlay != Overlay.NONE) 0 else vm.cursorExit,
                 align = Alignment.TopStart,
                 rowAlign = Alignment.Top,
                 initialScroll = 0,

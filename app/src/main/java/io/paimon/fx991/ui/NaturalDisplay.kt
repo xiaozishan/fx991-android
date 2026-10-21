@@ -53,8 +53,16 @@ private val FracPadH = 3.dp
 /** 自然书写渲染：分数上下堆叠、√ 带上横线、上标指数（纯 Compose 手绘）。
  *  cursor >= 0 时在对应偏移处画出闪烁竖线光标（批次 K3-A）。 */
 @Composable
-fun NaturalView(expr: String, style: NatStyle, modifier: Modifier = Modifier, cursor: Int = -1) {
-    val node = remember(expr, cursor) { if (cursor >= 0) buildNatCursor(expr, cursor) else buildNat(expr) }
+fun NaturalView(
+    expr: String,
+    style: NatStyle,
+    modifier: Modifier = Modifier,
+    cursor: Int = -1,
+    cursorExit: Int = 0,
+) {
+    val node = remember(expr, cursor, cursorExit) {
+        if (cursor >= 0) buildNatCursor(expr, cursor, cursorExit) else buildNat(expr)
+    }
     Box(modifier) { NatNodeView(node, style, cursor) }
 }
 
@@ -339,6 +347,7 @@ fun LcdMathLine(
     style: NatStyle,
     modifier: Modifier = Modifier,
     cursor: Int = -1,
+    cursorExit: Int = 0,
     align: Alignment = Alignment.BottomEnd,
     rowAlign: Alignment.Vertical = Alignment.Bottom,
     initialScroll: Int = Int.MAX_VALUE,
@@ -349,7 +358,7 @@ fun LcdMathLine(
             modifier = Modifier.horizontalScroll(scroll),
             verticalAlignment = rowAlign,
         ) {
-            NaturalView(expr, style, cursor = cursor)
+            NaturalView(expr, style, cursor = cursor, cursorExit = cursorExit)
         }
     }
 }

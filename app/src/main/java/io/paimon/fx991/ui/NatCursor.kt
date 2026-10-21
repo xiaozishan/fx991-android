@@ -640,6 +640,19 @@ fun buildNatCursor(expr: String, cursor: Int): Nat {
 }
 
 /**
+ * 结构层级版：cursorExit > 0 表示光标已从结构里跳出到外侧。
+ * 分数/指数/根号的「内容末尾」与「结构右边界」是同一个字符串偏移，
+ * 跳出时把光标标记放到整棵树的末尾（或开头），视觉上才真的离开结构。
+ */
+fun buildNatCursor(expr: String, cursor: Int, cursorExit: Int): Nat {
+    val root = buildNat(expr)
+    val p = cursor.coerceIn(0, expr.length)
+    if (cursorExit > 0 && p == 0) return Nat.Row(listOf(Nat.Cursor, root))
+    if (cursorExit > 0 && p >= expr.length) return Nat.Row(listOf(root, Nat.Cursor))
+    return placeCursor(root, p)
+}
+
+/**
  * 光标在布局树里的结构路径（测试 / 调试用），如 root/Row[1]/num、root/exp。
  * 找不到返回空串。
  */

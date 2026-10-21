@@ -71,7 +71,7 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
     // 每次结构性编辑前把 (表达式, 光标) 压栈；上限 200 步。
     // undoCount/redoCount 是给 Compose 的重组信号（栈本身不可观察）。
 
-    private data class EditSnapshot(val text: String, val cursor: Int)
+    private data class EditSnapshot(val text: String, val cursor: Int, val exit: Int)
 
     private val undoStack = ArrayDeque<EditSnapshot>()
     private val redoStack = ArrayDeque<EditSnapshot>()
@@ -87,7 +87,7 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
     private fun pushUndo() {
         val last = undoStack.lastOrNull()
         if (last != null && last.text == expression && last.cursor == cursor) return
-        undoStack.addLast(EditSnapshot(expression, cursor))
+        undoStack.addLast(EditSnapshot(expression, cursor, cursorExit))
         if (undoStack.size > 200) undoStack.removeFirst()
         redoStack.clear()
         undoCount = undoStack.size
@@ -96,9 +96,10 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
 
     fun undoEdit() {
         val snap = undoStack.removeLastOrNull() ?: return
-        redoStack.addLast(EditSnapshot(expression, cursor))
+        redoStack.addLast(EditSnapshot(expression, cursor, cursorExit))
         expression = snap.text
         cursor = snap.cursor
+        cursorExit = snap.exit
         justEvaluated = false
         resultText = ""
         isError = false
@@ -110,9 +111,10 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
 
     fun redoEdit() {
         val snap = redoStack.removeLastOrNull() ?: return
-        undoStack.addLast(EditSnapshot(expression, cursor))
+        undoStack.addLast(EditSnapshot(expression, cursor, cursorExit))
         expression = snap.text
         cursor = snap.cursor
+        cursorExit = snap.exit
         justEvaluated = false
         resultText = ""
         isError = false
@@ -126,61 +128,39 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
     var cursor by mutableStateOf(0)
         private set
 
+    /**
+     * 光标的结构层级（v2.1）：
+     *   0 = 还在最内层（分母末尾 / 指数末尾 / 根号内末尾）
+     *   n = 已从 n 层结构里「跳出」到外侧
+     * 分数/指数/根号的内容末尾与结构边界共用同一个偏移量，只有这个层级能区分它们。
+     */
+    var cursorExit by mutableStateOf(0)
+        private set
+
     /** 批次 K3-B：二级界面自然输入的焦点状态（哪个字段在被自家键盘编辑） */
     val natInput = io.paimon.fx991.ui.NatInput()
 
     fun moveCursorLeft() {
-        // 积分槽内：◀ 只在本槽内移动，不跳进别的槽（换槽用 ▲▼）
-        val slot = io.paimon.fx991.ui.CursorModel.integSlotBounds(expression, cursor)
-        if (slot != null) {
-            val next = io.paimon.fx991.ui.CursorModel.moveLeft(expression, cursor)
-            if (next < slot.first) {
-                // 出槽：从被积式开头往左 → 停到 dx 后面（积分块末尾）
-                val end = io.paimon.fx991.ui.CursorModel.integNodeEnd(expression, cursor)
-                if (end != null) cursor = end
-                return
-            }
-            cursor = next
-            return
-        }
-        val next = io.paimon.fx991.ui.CursorModel.moveLeft(expression, cursor)
-        // 光标循环：行首再往左 → 到行尾
-        cursor = if (next == cursor && cursor == 0) expression.length else next
+        val next = io.paimon.fx991.ui.CaretModel.left(
+            expression,
+            io.paimon.fx991.ui.Caret(cursor, cursorExit),
+        )
+        cursor = next.offset
+        cursorExit = next.exit
     }
 
     fun moveCursorRight() {
-        // 指数末尾按 ▶：移到正常行内（自动补括号保证语义）
-        val exit = io.paimon.fx991.ui.CursorModel.exitSupIfAtEnd(expression, cursor)
-        if (exit != null) {
-            expression = exit.text
-            cursor = exit.cursor
-            refreshPreview()
-            return
-        }
-        // 被积式末尾按 ▶ → 积分上限（屏幕上方的槽）
-        val inInteg = io.paimon.fx991.ui.CursorModel.integNavTarget(expression, cursor, true)
-        if (inInteg != null) {
-            cursor = inInteg
-            return
-        }
-        // 积分槽内：▶ 只在本槽内移动
-        val slot = io.paimon.fx991.ui.CursorModel.integSlotBounds(expression, cursor)
-        if (slot != null) {
-            val next = io.paimon.fx991.ui.CursorModel.moveRight(expression, cursor)
-            if (next > slot.second) return
-            cursor = next
-            return
-        }
-        cursor = io.paimon.fx991.ui.CursorModel.moveRight(expression, cursor)
-        // 光标循环：行尾再往右 → 到行首
-        if (cursor >= expression.length && expression.isNotEmpty()) {
-            val atEnd = io.paimon.fx991.ui.CursorModel.moveRight(expression, cursor) == cursor
-            if (atEnd) cursor = 0
-        }
+        val next = io.paimon.fx991.ui.CaretModel.right(
+            expression,
+            io.paimon.fx991.ui.Caret(cursor, cursorExit),
+        )
+        cursor = next.offset
+        cursorExit = next.exit
     }
 
     /** 批次 K3-symbolic：方向键上下 = 二维结构内垂直移光标（分数分子↔分母、上标↔基线、根号内外、∫上下限） */
     fun moveCursorUp() {
+        cursorExit = 0
         cursor = io.paimon.fx991.ui.CursorModel.moveUp(expression, cursor)
     }
 
@@ -198,6 +178,7 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 手指点 LCD 表达式：按横向比例把光标放到对应位置（手指触摸移光标） */
     fun tapToCursor(fraction: Float) {
+        cursorExit = 0
         if (expression.isEmpty()) return
         val f = fraction.coerceIn(0f, 1f)
         cursor = Math.round(f * expression.length).coerceIn(0, expression.length)
@@ -528,19 +509,43 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
             resultText = ""
             isError = false
             cursor = expression.length
+            cursorExit = 0
         } else {
             // 批次 K6：分数槽里直接打 × ÷ 留在槽内（分母吃到乘积，不用手动括号）
-            val r = if (text == "\u00D7" || text == "\u00F7")
+            val r = if (cursorExit > 0)
+                insertOutside(text)
+            else if (text == "\u00D7" || text == "\u00F7")
                 io.paimon.fx991.ui.CursorModel.insertOperator(expression, cursor, text)
             else
                 io.paimon.fx991.ui.CursorModel.insert(expression, cursor, text)
             expression = r.text
             cursor = r.cursor
+            cursorExit = 0
         }
         histCursor = -1
         solutionItems = emptyList()
         resultNote = ""
         refreshPreview()
+    }
+
+    /**
+     * 光标已跳出结构（cursorExit > 0）时的插入：
+     * 直接追加数字会并进分母/指数（9÷6 + 3 → 9÷63），所以按位置补一个 ×。
+     *   在结构右边：9÷6 + 3  → 9÷6×3
+     *   在结构左边：2 + 9÷6  → 2×9÷6
+     */
+    private fun insertOutside(text: String): io.paimon.fx991.ui.EditResult {
+        val operand = text.isNotEmpty() && run {
+            val c = text[0]
+            c.isDigit() || c == '.' || c.isLetter() || c == '\u221A' || c == '('
+        }
+        if (!operand) return io.paimon.fx991.ui.CursorModel.insert(expression, cursor, text)
+        return if (cursor == 0) {
+            val r = io.paimon.fx991.ui.CursorModel.insert(expression, 0, text + "\u00D7")
+            io.paimon.fx991.ui.EditResult(r.text, r.cursor - 1)
+        } else {
+            io.paimon.fx991.ui.CursorModel.insert(expression, cursor, "\u00D7" + text)
+        }
     }
 
     /** 批次 K3：就地括号调用 —— 插入模板文本，光标回退 back 格落进括号 / 空槽里 */
@@ -563,6 +568,7 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
         val r = io.paimon.fx991.ui.CursorModel.insertFraction(expression, cursor)
         expression = r.text
         cursor = r.cursor
+        cursorExit = 0
         histCursor = -1
         solutionItems = emptyList()
         resultNote = ""
@@ -582,6 +588,7 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
         val r = io.paimon.fx991.ui.CursorModel.insertDmsSeparator(expression, cursor)
         expression = r.text
         cursor = r.cursor
+        cursorExit = 0
         histCursor = -1
         solutionItems = emptyList()
         resultNote = ""
@@ -610,6 +617,7 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
     private fun clearAll() {
         expression = ""
         cursor = 0
+        cursorExit = 0
         resultText = ""
         previewText = ""
         isError = false
@@ -693,6 +701,7 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
         val r = io.paimon.fx991.ui.CursorModel.backspace(expression, cursor)
         expression = r.text
         cursor = r.cursor
+        cursorExit = 0
         histCursor = -1
         refreshPreview()
     }
@@ -728,6 +737,7 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun evaluateNow() {
+        cursorExit = 0
         val src = CalcEngine.autoClose(expression)
         if (src.isBlank()) return
         expression = src
