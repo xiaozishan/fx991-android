@@ -1575,17 +1575,7 @@ private fun KeyCapButton(
                 )
             }
         }
-        // 长按备用键提示点（右下角一个小点）
-        if (onHold != null) {
-            Box(
-                Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(bottom = 5.dp, end = 5.dp)
-                    .size(3.dp)
-                    .clip(CircleShape)
-                    .background(fg.copy(alpha = 0.38f))
-            )
-        }
+        // 长按提示点已移除：键帽上不再画灰度小圆点，保持键面干净
     }
 }
 
@@ -1610,10 +1600,11 @@ private fun DPad(click: (Key) -> Unit, modifier: Modifier) {
     val c = LocalCalcColors.current
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(8.dp),
+        // 与四周键帽统一：MD3 medium 圆角 + 同宽描边，不再自带投影
+        shape = RoundedCornerShape(14.dp),
         color = c.keyNeutral,
-        border = BorderStroke(1.dp, c.keyEdge),
-        shadowElevation = 1.dp,
+        border = BorderStroke(0.5.dp, c.keyEdge),
+        shadowElevation = 0.dp,
     ) {
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().weight(1f)) {
