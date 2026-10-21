@@ -104,6 +104,8 @@ data class Key(
     val shift: SubKey? = null,
     /** 紫色小字（ALPHA 层），印在键帽上方 */
     val alpha: SubKey? = null,
+    /** 长按呼出的备用键（按住 420ms 触发，主键不触发）—— MD3 触控键盘的 key-hold layer */
+    val hold: SubKey? = null,
     /** 横向权重，方向键等宽键用 */
     val weight: Float = 1f,
     val icon: KeyIcon = KeyIcon.NONE,
@@ -176,13 +178,19 @@ fun keypadRows(): List<List<Key>> = listOf(
     // 第 4 排：分数 · 根号 · 幂 · 对数（参照图主字写 x/y；√x 的 ALPHA 层是 mod）
     listOf(
         Key("x/y", KeyKind.FUNC, KeyAction.Fraction,
-            shift = SubKey("ab/c", KeyAction.FracFormat)),
+            shift = SubKey("ab/c", KeyAction.FracFormat),
+            hold = SubKey("带分数", KeyAction.FracFormat)),
         Key("\u221Ax", KeyKind.FUNC, ins("\u221A("), shift = SubKey("\u00B3\u221Ax", ins("cbrt(")),
-            alpha = SubKey("mod", ins("mod("))),
-        Key("x\u00B2", KeyKind.FUNC, ins("\u00B2"), shift = SubKey("x\u00B3", ins("\u00B3"))),
-        Key("x\u02B8", KeyKind.FUNC, ins("^"), shift = SubKey("\u02E3\u221Ay", ins("root("))),
-        Key("log", KeyKind.FUNC, ins("log("), shift = SubKey("10\u02E3", ins("10^"))),
-        Key("ln", KeyKind.FUNC, ins("ln("), shift = SubKey("e\u02E3", ins("exp("))),
+            alpha = SubKey("mod", ins("mod(")),
+            hold = SubKey("\u02B8\u221Ax", ins("root("))),
+        Key("x\u00B2", KeyKind.FUNC, ins("\u00B2"), shift = SubKey("x\u00B3", ins("\u00B3")),
+            hold = SubKey("x\u207B\u00B9", ins("\u207B\u00B9("))),
+        Key("x\u02B8", KeyKind.FUNC, ins("^"), shift = SubKey("\u02E3\u221Ay", ins("root(")),
+            hold = SubKey("10\u02E3", ins("10^"))),
+        Key("log", KeyKind.FUNC, ins("log("), shift = SubKey("10\u02E3", ins("10^")),
+            hold = SubKey("log\u2093y", ins("logb("))),
+        Key("ln", KeyKind.FUNC, ins("ln("), shift = SubKey("e\u02E3", ins("exp(")),
+            hold = SubKey("e\u02E3", ins("exp("))),
     ),
 
     // 第 5 排：(-) · °'" · hyp · sin · cos · tan（参照图：(-) 的 ALPHA 层是 a，°'" 的是 b）
@@ -197,11 +205,11 @@ fun keypadRows(): List<List<Key>> = listOf(
             shift = SubKey("|x|", ins("abs(")),
             alpha = SubKey("c", ins("C"))),
         Key("sin", KeyKind.FUNC, ins("sin("), shift = SubKey("sin\u207B\u00B9", ins("sin\u207B\u00B9(")),
-            alpha = SubKey("d", ins("D"))),
+            alpha = SubKey("d", ins("D")), hold = SubKey("sinh", ins("sinh("))),
         Key("cos", KeyKind.FUNC, ins("cos("), shift = SubKey("cos\u207B\u00B9", ins("cos\u207B\u00B9(")),
-            alpha = SubKey("e", ins("E"))),
+            alpha = SubKey("e", ins("E")), hold = SubKey("cosh", ins("cosh("))),
         Key("tan", KeyKind.FUNC, ins("tan("), shift = SubKey("tan\u207B\u00B9", ins("tan\u207B\u00B9(")),
-            alpha = SubKey("f", ins("F"))),
+            alpha = SubKey("f", ins("F")), hold = SubKey("tanh", ins("tanh("))),
     ),
 
     // 第 6 排：RCL · ENG · ( · ) · S⇔D · M+（参照图：STO/CLRv · i/Cot · %/Cot⁻¹ · ,/x · x⇄y/y · M−/m）
@@ -249,10 +257,12 @@ fun keypadRows(): List<List<Key>> = listOf(
             alpha = SubKey("HELP", KeyAction.GoScreen(Screen.FUNC_HELP))),
         Key("\u00D7", KeyKind.OP, ins("\u00D7"),
             shift = SubKey("nPr", ins("npr(")),
-            alpha = SubKey("GCD", ins("gcd("))),
+            alpha = SubKey("GCD", ins("gcd(")),
+            hold = SubKey("\u00B7", ins("\u00B7"))),
         Key("\u00F7", KeyKind.OP, ins("\u00F7"),
             shift = SubKey("nCr", ins("ncr(")),
-            alpha = SubKey("LCM", ins("lcm("))),
+            alpha = SubKey("LCM", ins("lcm(")),
+            hold = SubKey("x/y", KeyAction.Fraction)),
     ),
 
     // 第 9 排：1 2 3 + −（参照图：STAT · CMPLX · DISTR · Pol/Ceil · Rec/Floor）

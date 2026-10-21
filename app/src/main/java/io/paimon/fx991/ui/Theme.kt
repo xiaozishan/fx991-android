@@ -5,9 +5,12 @@ import android.content.Context
 import android.content.ContextWrapper
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
@@ -127,6 +130,18 @@ private val DarkCalc = CalcColors(
 
 val LocalCalcColors = staticCompositionLocalOf { DarkCalc }
 
+// ---------------------------------------------------------------------------
+// Material 3 形状标度：计算器用「中号」为主 —— 键帽 medium(14dp)、面板 large(20dp)
+// ---------------------------------------------------------------------------
+
+private val CalcShapes = Shapes(
+    extraSmall = RoundedCornerShape(6.dp),
+    small = RoundedCornerShape(10.dp),
+    medium = RoundedCornerShape(14.dp),
+    large = RoundedCornerShape(20.dp),
+    extraLarge = RoundedCornerShape(28.dp),
+)
+
 /** 深度自适应主题：跟随系统深/浅色，两套配色都保留橙 SHIFT / 紫 ALPHA */
 @Composable
 fun CalcTheme(
@@ -149,13 +164,25 @@ fun CalcTheme(
             surfaceVariant = calc.keyNeutral,
             onSurfaceVariant = calc.keyNeutralInk,
             error = calc.lcdError,
+            // MD3 色调层级（深色）：靠色阶分层，不用描边
+            surfaceContainerLowest = Color(0xFF0B0F13),
+            surfaceContainerLow = Color(0xFF141A20),
+            surfaceContainer = Color(0xFF1A2128),
+            surfaceContainerHigh = Color(0xFF222A33),
+            surfaceContainerHighest = Color(0xFF2B343E),
+            inverseSurface = Color(0xFFE3E8EE),
+            inverseOnSurface = Color(0xFF14181D),
         )
     } else {
         lightColorScheme(
             primary = ShiftOrange,
             onPrimary = ShiftOrangeInk,
+            primaryContainer = Color(0xFFFFDDB3),
+            onPrimaryContainer = Color(0xFF2A1B08),
             secondary = AlphaPurpleDeep,
             onSecondary = Color.White,
+            secondaryContainer = Color(0xFFE9DDFF),
+            onSecondaryContainer = Color(0xFF1B1030),
             tertiary = AccentOrange,
             onTertiary = AccentOrangeInk,
             background = calc.body,
@@ -164,7 +191,17 @@ fun CalcTheme(
             onSurface = calc.bodyInk,
             surfaceVariant = calc.keyNeutral,
             onSurfaceVariant = calc.keyNeutralInk,
+            outline = Color(0xFF767C85),
+            outlineVariant = Color(0xFFC6CCD4),
             error = calc.lcdError,
+            // MD3 色调层级：由浅灰蓝底派生，避免默认紫灰与自定义皮肤打架
+            surfaceContainerLowest = Color(0xFFFFFFFF),
+            surfaceContainerLow = Color(0xFFF4F7FA),
+            surfaceContainer = Color(0xFFEDF1F5),
+            surfaceContainerHigh = Color(0xFFE4E9EF),
+            surfaceContainerHighest = Color(0xFFDCE2E9),
+            inverseSurface = Color(0xFF2F3640),
+            inverseOnSurface = Color(0xFFF5F7FA),
         )
     }
     // edge-to-edge 下状态栏 / 导航栏图标是深是浅必须自己说了算：
@@ -177,7 +214,12 @@ fun CalcTheme(
         controller.isAppearanceLightNavigationBars = !darkTheme
     }
     CompositionLocalProvider(LocalCalcColors provides calc) {
-        MaterialTheme(colorScheme = scheme, typography = Typography(), content = content)
+        MaterialTheme(
+            colorScheme = scheme,
+            typography = Typography(),
+            shapes = CalcShapes,
+            content = content,
+        )
     }
 }
 

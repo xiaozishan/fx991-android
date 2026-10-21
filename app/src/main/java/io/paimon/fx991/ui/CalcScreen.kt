@@ -38,6 +38,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -1228,7 +1229,7 @@ private fun LcdDeck(vm: CalcViewModel, modifier: Modifier) {
 @Composable
 private fun LcdScreen(vm: CalcViewModel, modifier: Modifier) {
     val c = LocalCalcColors.current
-    val shape = RoundedCornerShape(6.dp)
+    val shape = RoundedCornerShape(16.dp)
     Column(
         modifier
             .clip(shape)
@@ -1436,7 +1437,10 @@ private fun KeypadDeck(vm: CalcViewModel, modifier: Modifier, rowHeight: Dp? = n
                                 .weight(key.weight)
                                 .fillMaxHeight()
                                 .padding(2.dp),
-                            onClick = { click(key) }
+                            onClick = { click(key) },
+                            onHold = key.hold?.let { h ->
+                                { click(Key(key.label, key.kind, h.action)) }
+                            },
                         )
                     }
                 }
@@ -1446,47 +1450,74 @@ private fun KeypadDeck(vm: CalcViewModel, modifier: Modifier, rowHeight: Dp? = n
 }
 
 @Composable
-private fun keyFace(kind: KeyKind, c: CalcColors): Pair<Color, Color> = when (kind) {
-    KeyKind.SHIFT -> c.keyShift to c.keyShiftInk
-    KeyKind.ALPHA -> c.keyAlpha to c.keyAlphaInk
-    KeyKind.DANGER -> c.keyAccent to c.keyAccentInk
-    KeyKind.DIGIT -> c.keyDigit to c.keyDigitInk
-    KeyKind.OP -> c.keyOp to c.keyOpInk
-    KeyKind.EQUALS -> c.keyEquals to c.keyEqualsInk
-    else -> c.keyNeutral to c.keyNeutralInk
+private fun keyFace(kind: KeyKind, c: CalcColors): Pair<Color, Color> {
+    // MD3：键帽按 tonal surface 分层，靠色阶而不是描边区分功能区
+    val m = MaterialTheme.colorScheme
+    return when (kind) {
+        KeyKind.SHIFT -> c.keyShift to c.keyShiftInk
+        KeyKind.ALPHA -> c.keyAlpha to c.keyAlphaInk
+        KeyKind.DANGER -> c.keyAccent to c.keyAccentInk          // 保留橙红识别色
+        KeyKind.DIGIT -> m.surfaceContainerLowest to m.onSurface  // 最亮 = 数字
+        KeyKind.OP -> m.surfaceContainer to m.onSurface
+        KeyKind.FUNC -> m.surfaceContainerHigh to m.onSurface
+        KeyKind.EQUALS -> m.inverseSurface to m.inverseOnSurface  // 反色 = 执行键
+        KeyKind.NAV -> m.surfaceContainer to m.onSurface
+        else -> m.surfaceContainerHigh to m.onSurface
+    }
 }
 
 @Composable
-private fun KeyCapButton(key: Key, modifier: Modifier, onClick: () -> Unit) {
+private fun KeyCapButton(
+    key: Key,
+    modifier: Modifier,
+    onClick: () -> Unit,
+    onHold: (() -> Unit)? = null,
+) {
     val c = LocalCalcColors.current
     val (bg, fg) = keyFace(key.kind, c)
+    val shape = RoundedCornerShape(14.dp)          // MD3 medium 形状
     var pressed by remember { mutableStateOf(false) }
+    var holdFired by remember { mutableStateOf(false) }
     val repeatable = key.action.isRepeatable()
-    val scale by animateFloatAsState(if (pressed) 0.94f else 1f, label = "keyScale")
-    // 长按连发：按下即响应一次，380ms 后每 62ms 一次（DEL / 方向键）
+    val scale by animateFloatAsState(if (pressed) 0.96f else 1f, label = "keyScale")
+
+    // 长按层：有备用键 → 420ms 呼出备用键（主键不触发）；否则 DEL / 方向键连发
     LaunchedEffect(pressed) {
-        if (!pressed || !repeatable) return@LaunchedEffect
-        delay(380)
-        while (pressed) {
-            onClick()
-            delay(62)
+        if (!pressed) return@LaunchedEffect
+        when {
+            onHold != null -> {
+                delay(420)
+                if (pressed) {
+                    holdFired = true
+                    onHold()
+                }
+            }
+            repeatable -> {
+                delay(380)
+                while (pressed) {
+                    onClick()
+                    delay(62)
+                }
+            }
         }
     }
+
     Box(
         modifier = modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .shadow(if (pressed) 0.dp else 1.dp, RoundedCornerShape(8.dp))
-            .clip(RoundedCornerShape(8.dp))
-            .background(if (pressed) lerp(bg, Color.Black, 0.14f) else bg)
-            .border(1.dp, c.keyEdge, RoundedCornerShape(8.dp))
+            .clip(shape)
+            .background(if (pressed) lerp(bg, fg, 0.12f) else bg)   // MD3 state layer
+            .border(0.5.dp, c.keyEdge, shape)
             .pointerInput(key) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     down.consume()
                     pressed = true
-                    onClick()
+                    holdFired = false
+                    if (onHold == null) onClick()
                     waitForUpOrCancellation()
                     pressed = false
+                    if (onHold != null && !holdFired) onClick()
                 }
             },
         contentAlignment = Alignment.Center,
@@ -1524,6 +1555,17 @@ private fun KeyCapButton(key: Key, modifier: Modifier, onClick: () -> Unit) {
                     textAlign = TextAlign.Center,
                 )
             }
+        }
+        // 长按备用键提示点（右下角一个小点）
+        if (onHold != null) {
+            Box(
+                Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(bottom = 5.dp, end = 5.dp)
+                    .size(3.dp)
+                    .clip(CircleShape)
+                    .background(fg.copy(alpha = 0.38f))
+            )
         }
     }
 }
