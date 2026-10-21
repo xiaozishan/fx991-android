@@ -32,6 +32,10 @@ sealed interface KeyAction {
     data object PadRight : KeyAction
     data object PadOk : KeyAction
 
+    // ---- 输入体验重构：撤销 / 重做 ----
+    data object Undo : KeyAction
+    data object Redo : KeyAction
+
     // ---- 批次 A：顶栏 6 项 + 数值功能入口 ----
     data object Menu : KeyAction
     data object Settings : KeyAction

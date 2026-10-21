@@ -1,6 +1,16 @@
 package io.paimon.fx991.ui
 
 import androidx.compose.foundation.BorderStroke
+import kotlinx.coroutines.delay
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.shadow
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.clickable
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
@@ -41,6 +51,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.Key as ComposeKey
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -102,7 +117,47 @@ fun CalcApp(vm: CalcViewModel = viewModel()) {
         // 具体内容各自用 Modifier.safeAreaPadding() 避让系统 Insets。
         CompositionLocalProvider(LocalNatInput provides vm.natInput) {
         Surface(Modifier.fillMaxSize(), color = c.body) {
-            Box(Modifier.fillMaxSize()) {
+            Box(
+                Modifier.fillMaxSize().onPreviewKeyEvent { ev ->
+                    if (ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    // 输入体验重构：Ctrl+Z / Ctrl+Y（外接键盘的撤销重做）
+                    if (ev.isCtrlPressed) {
+                        when (ev.key) {
+                            ComposeKey.Z -> { vm.undoEdit(); return@onPreviewKeyEvent true }
+                            ComposeKey.Y -> { vm.redoEdit(); return@onPreviewKeyEvent true }
+                        }
+                    }
+                    val a: KeyAction? = when (ev.key) {
+                        ComposeKey.Zero, ComposeKey.NumPad0 -> KeyAction.Insert("0")
+                        ComposeKey.One, ComposeKey.NumPad1 -> KeyAction.Insert("1")
+                        ComposeKey.Two, ComposeKey.NumPad2 -> KeyAction.Insert("2")
+                        ComposeKey.Three, ComposeKey.NumPad3 -> KeyAction.Insert("3")
+                        ComposeKey.Four, ComposeKey.NumPad4 -> KeyAction.Insert("4")
+                        ComposeKey.Five, ComposeKey.NumPad5 -> KeyAction.Insert("5")
+                        ComposeKey.Six, ComposeKey.NumPad6 -> KeyAction.Insert("6")
+                        ComposeKey.Seven, ComposeKey.NumPad7 -> KeyAction.Insert("7")
+                        ComposeKey.Eight, ComposeKey.NumPad8 -> KeyAction.Insert("8")
+                        ComposeKey.Nine, ComposeKey.NumPad9 -> KeyAction.Insert("9")
+                        ComposeKey.Period, ComposeKey.NumPadDot -> KeyAction.Insert(".")
+                        ComposeKey.Plus, ComposeKey.NumPadAdd -> KeyAction.Insert("+")
+                        ComposeKey.Minus, ComposeKey.NumPadSubtract -> KeyAction.Insert("-")
+                        ComposeKey.Multiply, ComposeKey.NumPadMultiply -> KeyAction.Insert("×")
+                        ComposeKey.Slash, ComposeKey.NumPadDivide -> KeyAction.Insert("/")
+                        ComposeKey.LeftBracket -> KeyAction.Insert("(")
+                        ComposeKey.RightBracket -> KeyAction.Insert(")")
+                        ComposeKey.Equals -> KeyAction.Insert("=")
+                        ComposeKey.Enter, ComposeKey.NumPadEnter -> KeyAction.Equals
+                        ComposeKey.Backspace -> KeyAction.Del
+                        ComposeKey.Escape -> KeyAction.Ac
+                        ComposeKey.DirectionLeft -> KeyAction.PadLeft
+                        ComposeKey.DirectionRight -> KeyAction.PadRight
+                        ComposeKey.DirectionUp -> KeyAction.PadUp
+                        ComposeKey.DirectionDown -> KeyAction.PadDown
+                        else -> null
+                    }
+                    if (a == null) false else { vm.onAction(a); true }
+                }
+            ) {
                 when (vm.screen) {
                     Screen.ODE -> OdeScreen(onBack = { vm.goto(Screen.CALC) })
                     Screen.CMPLX -> CmplxScreen(onBack = { vm.goto(Screen.CALC) })
@@ -1245,6 +1300,23 @@ private fun StatusBar(vm: CalcViewModel) {
                 StatusChip(vm.settings.notation.shortLabel, c, true)
             }
             StatusChip(vm.displayMode.shortLabel, c, true)
+            // 输入体验重构：撤销 / 重做（点按生效，长按无）
+            Text(
+                "↶",
+                color = if (vm.canUndo) c.lcdFg else c.lcdDim.copy(alpha = 0.28f),
+                fontFamily = Mono, fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .clickable(enabled = vm.canUndo) { vm.undoEdit() }
+                    .padding(horizontal = 2.dp, vertical = 1.dp),
+            )
+            Text(
+                "↷",
+                color = if (vm.canRedo) c.lcdFg else c.lcdDim.copy(alpha = 0.28f),
+                fontFamily = Mono, fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .clickable(enabled = vm.canRedo) { vm.redoEdit() }
+                    .padding(horizontal = 2.dp, vertical = 1.dp),
+            )
         }
     }
 }
@@ -1388,14 +1460,36 @@ private fun keyFace(kind: KeyKind, c: CalcColors): Pair<Color, Color> = when (ki
 private fun KeyCapButton(key: Key, modifier: Modifier, onClick: () -> Unit) {
     val c = LocalCalcColors.current
     val (bg, fg) = keyFace(key.kind, c)
-    Button(
-        onClick = onClick,
-        modifier = modifier,
-        shape = RoundedCornerShape(8.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = bg, contentColor = fg),
-        elevation = ButtonDefaults.buttonElevation(defaultElevation = 1.dp, pressedElevation = 5.dp),
-        contentPadding = PaddingValues(0.dp),
-        border = BorderStroke(1.dp, c.keyEdge),
+    var pressed by remember { mutableStateOf(false) }
+    val repeatable = key.action.isRepeatable()
+    val scale by animateFloatAsState(if (pressed) 0.94f else 1f, label = "keyScale")
+    // 长按连发：按下即响应一次，380ms 后每 62ms 一次（DEL / 方向键）
+    LaunchedEffect(pressed) {
+        if (!pressed || !repeatable) return@LaunchedEffect
+        delay(380)
+        while (pressed) {
+            onClick()
+            delay(62)
+        }
+    }
+    Box(
+        modifier = modifier
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .shadow(if (pressed) 0.dp else 1.dp, RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (pressed) lerp(bg, Color.Black, 0.14f) else bg)
+            .border(1.dp, c.keyEdge, RoundedCornerShape(8.dp))
+            .pointerInput(key) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    down.consume()
+                    pressed = true
+                    onClick()
+                    waitForUpOrCancellation()
+                    pressed = false
+                }
+            },
+        contentAlignment = Alignment.Center,
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -1433,6 +1527,10 @@ private fun KeyCapButton(key: Key, modifier: Modifier, onClick: () -> Unit) {
         }
     }
 }
+
+private fun KeyAction.isRepeatable(): Boolean =
+    this is KeyAction.Del || this is KeyAction.PadLeft || this is KeyAction.PadRight ||
+        this is KeyAction.PadUp || this is KeyAction.PadDown
 
 private fun keyFontSize(len: Int) = when {
     len <= 1 -> 18.sp
@@ -1485,16 +1583,39 @@ private fun androidx.compose.foundation.layout.RowScope.PadKey(
     click: (Key) -> Unit,
     center: Boolean = false,
 ) {
-    Button(
-        onClick = { click(Key(glyph, KeyKind.NAV, action)) },
-        modifier = modifier.fillMaxHeight().padding(1.dp),
-        shape = CircleShape,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = if (center) c.keyDigit else Color.Transparent,
-            contentColor = c.keyNeutralInk,
-        ),
-        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 2.dp),
-        contentPadding = PaddingValues(0.dp),
+    var pressed by remember { mutableStateOf(false) }
+    LaunchedEffect(pressed) {
+        if (!pressed || !action.isRepeatable()) return@LaunchedEffect
+        delay(380)
+        while (pressed) {
+            click(Key(glyph, KeyKind.NAV, action))
+            delay(62)
+        }
+    }
+    Box(
+        modifier = modifier
+            .fillMaxHeight()
+            .padding(1.dp)
+            .clip(CircleShape)
+            .background(
+                when {
+                    pressed && center -> lerp(c.keyDigit, Color.Black, 0.14f)
+                    pressed -> c.keyEdge.copy(alpha = 0.55f)
+                    center -> c.keyDigit
+                    else -> Color.Transparent
+                }
+            )
+            .pointerInput(action) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    down.consume()
+                    pressed = true
+                    click(Key(glyph, KeyKind.NAV, action))
+                    waitForUpOrCancellation()
+                    pressed = false
+                }
+            },
+        contentAlignment = Alignment.Center,
     ) {
         Text(glyph, fontSize = if (center) 12.sp else 11.sp, color = c.keyNeutralInk)
     }
@@ -1508,13 +1629,19 @@ private fun androidx.compose.foundation.layout.RowScope.PadKey(
 private fun rememberKeyClick(vm: CalcViewModel): (Key) -> Unit {
     val haptics = LocalHapticFeedback.current
     val vibrate = vm.settings.vibration
+    // 长按连发时隔一段时间才震一次，不然 16 次/秒 会把手震麻
+    var lastHaptic by remember { mutableStateOf(0L) }
     return { key ->
         val action = when {
             vm.alphaActive && key.alpha != null -> key.alpha!!.action
             vm.shiftActive && key.shift != null -> key.shift!!.action
             else -> key.action
         }
-        if (vibrate) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        val now = System.currentTimeMillis()
+        if (vibrate && now - lastHaptic > 120) {
+            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            lastHaptic = now
+        }
         vm.onAction(action)
     }
 }

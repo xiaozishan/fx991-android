@@ -183,8 +183,14 @@ object CursorModel {
         return EditResult(expr.substring(0, p) + text + expr.substring(p), p + text.length)
     }
 
-    /** 退格：删掉光标前一个原子（或一个字符）；光标跟随 */
-    fun backspace(expr: String, pos: Int): EditResult {
+    /** 退格：结构优先（v1.13 起委托 InputCore：空组整体删 / 悬挂结构清理），其次原子，最后单字符 */
+    fun backspace(expr: String, pos: Int): EditResult = InputCore.backspace(expr, pos)
+
+    /** 前删（Delete 键语义），与退格规则镜像 */
+    fun deleteForward(expr: String, pos: Int): EditResult = InputCore.deleteForward(expr, pos)
+
+    /** 旧实现（保留作回归对照，不再被调用） */
+    fun backspaceLegacy(expr: String, pos: Int): EditResult {
         val p = clamp(expr, pos)
         if (p == 0) return EditResult(expr, 0)
         for (a in ATOMS) {
@@ -195,8 +201,8 @@ object CursorModel {
         return EditResult(expr.removeRange(p - 1, p), p - 1)
     }
 
-    /** 前删（Delete 键语义）：删掉光标处一个原子（或一个字符）；光标不动 */
-    fun deleteForward(expr: String, pos: Int): EditResult {
+    /** 旧实现（保留作回归对照，不再被调用） */
+    fun deleteForwardLegacy(expr: String, pos: Int): EditResult {
         val p = clamp(expr, pos)
         if (p >= expr.length) return EditResult(expr, p)
         for (a in ATOMS) {

@@ -67,6 +67,61 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
     var expression by mutableStateOf("")
         private set
 
+    // ---- 输入体验重构（v1.13）：撤销 / 重做 ----
+    // 每次结构性编辑前把 (表达式, 光标) 压栈；上限 200 步。
+    // undoCount/redoCount 是给 Compose 的重组信号（栈本身不可观察）。
+
+    private data class EditSnapshot(val text: String, val cursor: Int)
+
+    private val undoStack = ArrayDeque<EditSnapshot>()
+    private val redoStack = ArrayDeque<EditSnapshot>()
+
+    var undoCount by mutableStateOf(0)
+        private set
+    var redoCount by mutableStateOf(0)
+        private set
+
+    val canUndo: Boolean get() = undoCount > 0
+    val canRedo: Boolean get() = redoCount > 0
+
+    private fun pushUndo() {
+        val last = undoStack.lastOrNull()
+        if (last != null && last.text == expression && last.cursor == cursor) return
+        undoStack.addLast(EditSnapshot(expression, cursor))
+        if (undoStack.size > 200) undoStack.removeFirst()
+        redoStack.clear()
+        undoCount = undoStack.size
+        redoCount = 0
+    }
+
+    fun undoEdit() {
+        val snap = undoStack.removeLastOrNull() ?: return
+        redoStack.addLast(EditSnapshot(expression, cursor))
+        expression = snap.text
+        cursor = snap.cursor
+        justEvaluated = false
+        resultText = ""
+        isError = false
+        histCursor = -1
+        undoCount = undoStack.size
+        redoCount = redoStack.size
+        refreshPreview()
+    }
+
+    fun redoEdit() {
+        val snap = redoStack.removeLastOrNull() ?: return
+        undoStack.addLast(EditSnapshot(expression, cursor))
+        expression = snap.text
+        cursor = snap.cursor
+        justEvaluated = false
+        resultText = ""
+        isError = false
+        histCursor = -1
+        undoCount = undoStack.size
+        redoCount = redoStack.size
+        refreshPreview()
+    }
+
     /** 批次 K3-A：主行可见光标 = 表达式字符串里的偏移量（0..length） */
     var cursor by mutableStateOf(0)
         private set
@@ -421,6 +476,8 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
             KeyAction.PadLeft -> moveCursorLeft()
             KeyAction.PadRight -> moveCursorRight()
             KeyAction.PadOk -> evaluateNow()
+            KeyAction.Undo -> undoEdit()
+            KeyAction.Redo -> redoEdit()
             KeyAction.Sd -> cycleDisplay()
             KeyAction.FracFormat -> cycleDisplay()
             KeyAction.Fraction -> insertFractionKey()
@@ -461,6 +518,7 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
     private fun shouldRemainNewEntry(): Boolean = justEvaluated
 
     private fun insert(text: String) {
+        pushUndo()
         if (shouldRemainNewEntry()) {
             val c = text.firstOrNull()
             val startsOperand = c != null && (c.isDigit() || c == '.' || c == '(' || c == '\u221A' ||
@@ -501,6 +559,7 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
             insert("\u00F7")
             return
         }
+        pushUndo()
         val r = io.paimon.fx991.ui.CursorModel.insertFraction(expression, cursor)
         expression = r.text
         cursor = r.cursor
@@ -519,6 +578,7 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
             resultText = ""
             isError = false
         }
+        pushUndo()
         val r = io.paimon.fx991.ui.CursorModel.insertDmsSeparator(expression, cursor)
         expression = r.text
         cursor = r.cursor
@@ -536,6 +596,7 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
             if (s >= 0 && expression.regionMatches(s, nm, 0, nm.length) &&
                 expression.getOrNull(cursor - 1) == '(' && expression.getOrNull(cursor) == ')'
             ) {
+                pushUndo()
                 val next = names[(ix + 1) % names.size]
                 expression = expression.substring(0, s) + next + expression.substring(cursor - 1)
                 cursor = s + next.length + 1
@@ -628,6 +689,7 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
             cursor = expression.length
         }
         if (expression.isEmpty()) return
+        pushUndo()
         val r = io.paimon.fx991.ui.CursorModel.backspace(expression, cursor)
         expression = r.text
         cursor = r.cursor
