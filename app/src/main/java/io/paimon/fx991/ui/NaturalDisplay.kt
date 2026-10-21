@@ -184,13 +184,10 @@ private fun SupView(node: Nat.Sup, style: NatStyle, signal: Int = -1) {
         // 行内基线大约在行高的 80% 处（Compose Text 默认行高 ≈ 1.2 em）
         val baseBaseline = base.height * 0.80f
         val expBaseline = exp.height * 0.80f
-        var expTop = baseBaseline - raisePx - expBaseline
-        var baseTop = 0f
-        if (expTop < 0f) {
-            // 指数高出顶边时整体下移，保证不裁切
-            baseTop = -expTop
-            expTop = 0f
-        }
+        // 指数抬到基数基线之上；顶到上边界就**只让指数停在顶端**，
+        // 绝不下压基数 —— 否则分母里的 9³ 会比旁边的 6 低一截，看起来像下沉。
+        val expTop = (baseBaseline - raisePx - expBaseline).coerceAtLeast(0f)
+        val baseTop = 0f
         val w = base.width + exp.width
         val h = maxOf(baseTop + base.height, expTop + exp.height).toInt()
         layout(w, h) {
