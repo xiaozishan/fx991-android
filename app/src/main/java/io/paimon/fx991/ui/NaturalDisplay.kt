@@ -184,14 +184,14 @@ private fun SupView(node: Nat.Sup, style: NatStyle, signal: Int = -1) {
         // 行内基线大约在行高的 80% 处（Compose Text 默认行高 ≈ 1.2 em）
         val baseBaseline = base.height * 0.80f
         val expBaseline = exp.height * 0.80f
-        // 指数抬到基数基线之上；顶到上边界就**只让指数停在顶端**，
-        // 绝不下压基数 —— 否则分母里的 9³ 会比旁边的 6 低一截，看起来像下沉。
-        val expTop = (baseBaseline - raisePx - expBaseline).coerceAtLeast(0f)
-        val baseTop = 0f
+        // 指数按基线抬升 0.42em，允许出到节点上沿之外（负 y）——
+        // 这样基数不会被往下压（分母里的 9³ 不会沉），指数又稳稳停在右上角。
+        // 父级布局不裁剪，负 y 依然能画出来。
+        val expTop = baseBaseline - raisePx - expBaseline
         val w = base.width + exp.width
-        val h = maxOf(baseTop + base.height, expTop + exp.height).toInt()
+        val h = maxOf(base.height, (expTop + exp.height).toInt())
         layout(w, h) {
-            base.place(x = 0, y = baseTop.toInt())
+            base.place(x = 0, y = 0)
             exp.place(x = base.width, y = expTop.toInt())
         }
     }
