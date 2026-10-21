@@ -155,7 +155,7 @@ fun keypadRows(): List<List<Key>> = listOf(
     listOf(
         Key("SHIFT", KeyKind.SHIFT, KeyAction.Shift, labelScale = 0.85f),
         Key("ALPHA", KeyKind.ALPHA, KeyAction.Alpha, labelScale = 0.85f),
-        Key("", KeyKind.NAV, KeyAction.PadOk, weight = 2.4f, icon = KeyIcon.NONE),
+        Key("", KeyKind.NAV, KeyAction.PadOk, weight = 3.2f, icon = KeyIcon.NONE),
         Key("MODE", KeyKind.FUNC, KeyAction.Mode, labelScale = 0.85f),
         // 2nd 与 SHIFT 同义：等价第二功能切换
         Key("2nd", KeyKind.FUNC, KeyAction.Shift, labelScale = 0.85f),

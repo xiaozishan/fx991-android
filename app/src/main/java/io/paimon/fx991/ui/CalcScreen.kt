@@ -1417,7 +1417,7 @@ private fun KeypadDeck(vm: CalcViewModel, modifier: Modifier, rowHeight: Dp? = n
         rows.forEach { row ->
             // rowHeight != null 时走紧凑布局（固定行高，整体可滚动）；否则撑满剩余高度（权重布局）
             // 方向键那一行给更高的权重，五向键才有足够触控面积
-            val rowWeight = if (row.any { it.kind == KeyKind.NAV }) 1.34f else 1f
+            val rowWeight = if (row.any { it.kind == KeyKind.NAV }) 1.38f else 1f
             val rowModifier = if (rowHeight != null) {
                 Modifier.fillMaxWidth().height(rowHeight)
             } else {
@@ -1662,7 +1662,7 @@ private fun androidx.compose.foundation.layout.RowScope.PadKey(
             },
         contentAlignment = Alignment.Center,
     ) {
-        Text(glyph, fontSize = if (center) 15.sp else 14.sp, color = c.keyNeutralInk)
+        Text(glyph, fontSize = if (center) 16.sp else 15.sp, color = c.keyNeutralInk)
     }
 }
 
