@@ -1438,8 +1438,9 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
     fun applyPhotoExpr(expr: String, explain: String) {
         goto(Screen.CALC)
         justEvaluated = false
-        expression = expr
-        cursor = expr.length
+        val clean = io.paimon.fx991.engine.InputNorm.normalize(expr)
+        expression = clean
+        cursor = clean.length
         resultText = ""
         previewText = ""
         isError = false
@@ -1451,6 +1452,28 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
         if (explain.isNotBlank() && !isError) {
             resultNote = if (resultNote.isBlank()) explain else "$resultNote ｜ $explain"
         }
+    }
+
+    /**
+     * 外部文本入口（ProcessText 选中文字 / 快捷方式 / 分享）：
+     * 先把「长得像但不是」的字符归一化（– ✕ ⁄ 全角括号 零宽空格……），
+     * 再插进主行并立即求值，与键盘键入共用同一套管线。
+     */
+    fun applyIncomingText(raw: String) {
+        val clean = io.paimon.fx991.engine.InputNorm.normalize(raw)
+        if (clean.isBlank()) return
+        goto(Screen.CALC)
+        justEvaluated = false
+        expression = clean
+        cursor = clean.length
+        resultText = ""
+        previewText = ""
+        isError = false
+        solutionItems = emptyList()
+        resultNote = ""
+        lastComplex = null
+        polarFormShown = false
+        evaluateNow()
     }
 
     private companion object {

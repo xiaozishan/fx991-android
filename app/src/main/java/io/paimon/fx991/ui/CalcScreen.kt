@@ -34,6 +34,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -82,6 +83,14 @@ const val APP_REPO = "https://github.com/xiaozishan/fx991-android"
 
 @Composable
 fun CalcApp(vm: CalcViewModel = viewModel()) {
+    // 外部文本（ProcessText 选中文字 / 快捷方式）→ 主行并立即求值
+    val incoming = io.paimon.fx991.IncomingText.pending
+    LaunchedEffect(incoming) {
+        if (incoming != null) {
+            vm.applyIncomingText(incoming)
+            io.paimon.fx991.IncomingText.consume()
+        }
+    }
     val dark = when (vm.settings.theme) {
         AppTheme.SYSTEM -> isSystemInDarkTheme()
         AppTheme.LIGHT -> false
