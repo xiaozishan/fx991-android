@@ -1269,10 +1269,10 @@ private fun LcdScreen(vm: CalcViewModel, modifier: Modifier) {
 }
 
 private fun lcdFont(len: Int) = when {
-    len <= 14 -> 22.sp
-    len <= 26 -> 18.sp
-    len <= 44 -> 15.sp
-    else -> 12.sp
+    len <= 14 -> 25.sp
+    len <= 26 -> 20.sp
+    len <= 44 -> 16.5.sp
+    else -> 13.5.sp
 }
 
 @Composable
@@ -1400,9 +1400,9 @@ private fun ResultLine(vm: CalcViewModel) {
 }
 
 private fun resultFont(len: Int) = when {
-    len <= 12 -> 28.sp
-    len <= 22 -> 22.sp
-    else -> 17.sp
+    len <= 12 -> 30.sp
+    len <= 22 -> 24.sp
+    else -> 19.sp
 }
 
 // ---------------------------------------------------------------------------
@@ -1552,11 +1552,11 @@ private fun KeyCapButton(
                 val alphaInk = if (key.kind == KeyKind.DANGER) fg else AlphaPurple
                 Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                     key.shift?.let {
-                        Text(it.label, color = shiftInk, fontSize = 7.5.sp, maxLines = 1,
+                        Text(it.label, color = shiftInk, fontSize = 8.5.sp, maxLines = 1,
                             fontWeight = FontWeight.Bold)
                     }
                     key.alpha?.let {
-                        Text(it.label, color = alphaInk, fontSize = 7.5.sp, maxLines = 1,
+                        Text(it.label, color = alphaInk, fontSize = 8.5.sp, maxLines = 1,
                             fontWeight = FontWeight.Bold)
                     }
                 }
@@ -1584,11 +1584,11 @@ private fun KeyAction.isRepeatable(): Boolean =
         this is KeyAction.PadUp || this is KeyAction.PadDown
 
 private fun keyFontSize(len: Int) = when {
-    len <= 1 -> 18.sp
-    len <= 2 -> 15.sp
-    len <= 3 -> 13.sp
-    len <= 4 -> 11.sp
-    else -> 10.sp
+    len <= 1 -> 20.sp
+    len <= 2 -> 17.sp
+    len <= 3 -> 14.5.sp
+    len <= 4 -> 12.sp
+    else -> 11.sp
 }
 
 // ---------------------------------------------------------------------------
