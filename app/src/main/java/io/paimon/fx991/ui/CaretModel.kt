@@ -1,142 +1,133 @@
 package io.paimon.fx991.ui
 
-// ---------------------------------------------------------------------------
-// 光标模型 v2：结构层级（Caret = 偏移量 + 已跳出的层数）
-//
-//   问题：分数/指数/根号的「内容末尾」和「结构右边界」在字符串里是同一个偏移量。
-//   旧模型只有 Int 偏移，所以 9÷6 末尾按 → 只能直接绕回开头，跳过了
-//   「分数右边 → 分数左边 → 分子开头」这两级。
-//
-//   新模型：Caret(offset, exit)
-//     exit = 0      在最内层（分母末尾 / 指数末尾）
-//     exit = 1      跳出一层（分数整体的右边）
-//     exit = n      跳出 n 层
-//
-//   向右：内部末尾 → 逐层跳出 → 到文末再绕到文首的最外层 → 再逐层进入
-//   向左：镜像。
-//   结构区间直接取自 buildNat（渲染同一套解析器），不另写一份语法。
-// ---------------------------------------------------------------------------
-
+/** 同一个源码偏移可以落在结构内部，也可以落在结构外的不同层级。 */
 data class Caret(val offset: Int, val exit: Int = 0)
 
-object CaretModel {
+internal data class CaretBoundary(val node: Nat, val before: Boolean)
 
-    private data class Span(val s: Int, val e: Int)
+/** 移动和渲染共用同一棵布局树来识别结构边界。 */
+internal class CaretLayout(val root: Nat) {
+    private val structures = ArrayList<Nat>()
+    private val hiddenGroupEdges = HashMap<Int, Int>()
 
-    /** 有「内容边界 == 结构边界」歧义的结构：分数 / 上标 / 根号 */
-    private fun spans(expr: String): List<Span> {
-        val out = ArrayList<Span>()
-        val root = try {
-            buildNat(expr)
-        } catch (_: Exception) {
-            return out
-        }
-        collect(root, out)
-        return out
+    init {
+        collect(root)
     }
 
-    private fun collect(n: Nat, out: MutableList<Span>) {
-        when (n) {
-            is Nat.Row -> n.items.forEach { collect(it, out) }
+    private fun collect(node: Nat) {
+        when (node) {
+            is Nat.Row -> node.items.forEach(::collect)
             is Nat.Frac -> {
-                collect(n.n, out)
-                collect(n.d, out)
-                push(n, out)
+                for (slot in listOf(node.n, node.d)) {
+                    val content = groupContent(slot)
+                    if (content != null) {
+                        hiddenGroupEdges[slot.srcStart] = content.srcStart
+                        if (content.srcEnd < slot.srcEnd) hiddenGroupEdges[slot.srcEnd] = content.srcEnd
+                    }
+                    collect(slot)
+                }
             }
             is Nat.Sup -> {
-                collect(n.base, out)
-                collect(n.exp, out)
-                push(n, out)
+                collect(node.base)
+                collect(node.exp)
             }
-            is Nat.Sqrt -> {
-                collect(n.a, out)
-                push(n, out)
+            is Nat.Sqrt -> collect(node.a)
+            is Nat.Integ -> {
+                collect(node.body)
+                collect(node.lo)
+                collect(node.hi)
             }
             else -> Unit
         }
+        if ((node is Nat.Frac || node is Nat.Sup || node is Nat.Sqrt) &&
+            node.srcStart >= 0 && node.srcEnd > node.srcStart
+        ) {
+            structures.add(node)
+        }
     }
 
-    private fun push(n: Nat, out: MutableList<Span>) {
-        if (n.srcStart >= 0 && n.srcEnd > n.srcStart) out.add(Span(n.srcStart, n.srcEnd))
+    private fun endsAt(offset: Int) = structures.filter { it.srcEnd == offset }.sortedByDescending { it.srcStart }
+    private fun startsAt(offset: Int) = structures.filter { it.srcStart == offset }.sortedBy { it.srcEnd }
+
+    fun boundary(caret: Caret): CaretBoundary? {
+        if (caret.exit <= 0) return null
+        val index = caret.exit - 1
+        endsAt(caret.offset).getOrNull(index)?.let { return CaretBoundary(it, before = false) }
+        return startsAt(caret.offset).getOrNull(index)?.let { CaretBoundary(it, before = true) }
     }
 
-    /** 在当前偏移处「结束」的结构，最内层在前 */
-    private fun endsAt(sp: List<Span>, o: Int): List<Span> =
-        sp.filter { it.e == o }.sortedByDescending { it.s }
+    fun maxExit(offset: Int): Int = maxOf(endsAt(offset).size, startsAt(offset).size)
 
-    /** 在当前偏移处「开始」的结构，最内层在前 */
-    private fun startsAt(sp: List<Span>, o: Int): List<Span> =
-        sp.filter { it.s == o }.sortedBy { it.e }
-
-    /** 该偏移处允许的最大 exit（= 包着它的结构层数） */
-    fun maxExit(expr: String, offset: Int): Int {
-        if (expr.isEmpty()) return 0
-        val o = offset.coerceIn(0, expr.length)
-        val sp = spans(expr)
-        return maxOf(endsAt(sp, o).size, startsAt(sp, o).size)
+    fun normalize(caret: Caret): Caret {
+        val exit = caret.exit.coerceIn(0, maxExit(caret.offset))
+        if (exit > 0) return Caret(caret.offset, exit)
+        var offset = caret.offset
+        repeat(hiddenGroupEdges.size) {
+            offset = hiddenGroupEdges[offset] ?: return Caret(offset)
+        }
+        return Caret(offset)
     }
 
-    /** 把任意 (offset, exit) 收敛到合法状态 */
-    fun normalize(expr: String, caret: Caret): Caret {
-        val o = caret.offset.coerceIn(0, expr.length)
-        return Caret(o, caret.exit.coerceIn(0, maxExit(expr, o)))
+    /** 返回该偏移从左到右的层级，略过分数槽里被隐藏的括号边缘。 */
+    fun exitsAt(offset: Int): IntProgression {
+        val inner = if (offset in hiddenGroupEdges) 1 else 0
+        val ends = endsAt(offset).size
+        return if (ends > 0) inner..ends else startsAt(offset).size downTo inner
     }
+}
 
-    /**
-     * 右移一格（视觉阅读顺序）：
-     *   1. 内容末尾还在结构里 → 先跳出一层（同一偏移，exit+1）
-     *   2. 已在最右端且跳完 → 绕到文首最外层
-     *   3. 在结构的左外侧 → 进入一层（exit-1）
-     *   4. 普通右移
-     */
-    fun right(expr: String, caret: Caret): Caret {
-        val len = expr.length
-        if (len == 0) return Caret(0, 0)
-        val o = caret.offset.coerceIn(0, len)
-        val e = caret.exit.coerceAtLeast(0)
-        val sp = spans(expr)
-        val ends = endsAt(sp, o)
-        val starts = startsAt(sp, o)
+object CaretModel {
+    fun maxExit(expr: String, offset: Int): Int =
+        CaretLayout(buildNat(expr)).maxExit(offset.coerceIn(0, expr.length))
 
-        if (e < ends.size) return Caret(o, e + 1)
+    fun normalize(expr: String, caret: Caret): Caret =
+        CaretLayout(buildNat(expr)).normalize(caret.copy(offset = caret.offset.coerceIn(0, expr.length)))
 
-        if (o >= len) {
-            return Caret(0, startsAt(sp, 0).size)
+    fun right(expr: String, caret: Caret): Caret = horizontal(expr, caret, right = true)
+    fun left(expr: String, caret: Caret): Caret = horizontal(expr, caret, right = false)
+
+    private fun horizontal(expr: String, caret: Caret, right: Boolean): Caret {
+        val layout = CaretLayout(buildNat(expr))
+        val current = layout.normalize(caret.copy(offset = caret.offset.coerceIn(0, expr.length)))
+        var offset = current.offset
+        val exits = layout.exitsAt(offset).let { if (right) it else it.reversed() }
+        if (current.exit in exits && current.exit != exits.last) {
+            return Caret(offset, current.exit + exits.step)
         }
 
-        if (e > 0 && starts.size >= e) return Caret(o, e - 1)
-
-        return Caret(o + 1, 0)
+        repeat(expr.length + 1) {
+            offset = if (right) {
+                if (offset == expr.length) 0 else offset + 1
+            } else {
+                if (offset == 0) expr.length else offset - 1
+            }
+            val next = layout.exitsAt(offset)
+            if (!next.isEmpty()) return Caret(offset, if (right) next.first else next.last)
+        }
+        return Caret(offset)
     }
 
-    /**
-     * 左移一格（与 right 镜像）：
-     *   1. 已在最左端 → 绕到末尾最外层
-     *   2. 在结构右外侧 → 进入一层
-     *   3. 普通左移
-     */
-    fun left(expr: String, caret: Caret): Caret {
-        val len = expr.length
-        if (len == 0) return Caret(0, 0)
-        val o = caret.offset.coerceIn(0, len)
-        val e = caret.exit.coerceAtLeast(0)
-        val sp = spans(expr)
+    fun up(expr: String, caret: Caret): Caret = vertical(expr, caret, up = true)
+    fun down(expr: String, caret: Caret): Caret = vertical(expr, caret, up = false)
 
-        if (o == 0) return Caret(len, endsAt(sp, len).size)
-        if (e > 0) return Caret(o, e - 1)
-        return Caret(o - 1, 0)
+    private fun vertical(expr: String, caret: Caret, up: Boolean): Caret {
+        val layout = CaretLayout(buildNat(expr))
+        val current = layout.normalize(caret.copy(offset = caret.offset.coerceIn(0, expr.length)))
+        val offset = current.offset
+        val boundary = layout.boundary(current)?.node
+        CursorModel.verticalTarget(layout.root, offset, up, boundary)?.let { return Caret(it) }
+        if (CursorModel.insideSlot(layout.root, offset, boundary)) return current
+        val edge = if (up) 0 else expr.length
+        return Caret(edge, layout.maxExit(edge))
     }
+
+    fun isBeforeStructure(expr: String, caret: Caret): Boolean =
+        CaretLayout(buildNat(expr)).boundary(caret)?.before == true
 
     /** 调试/测试：当前光标的结构路径描述 */
     fun describe(expr: String, caret: Caret): String {
-        val sp = spans(expr)
-        val e = endsAt(sp, caret.offset).getOrNull(caret.exit - 1)
-        val s = startsAt(sp, caret.offset).getOrNull(caret.exit - 1)
-        return when {
-            caret.exit == 0 -> "inner@${caret.offset}"
-            e != null -> "after(${e.s}..${e.e})"
-            s != null -> "before(${s.s}..${s.e})"
-            else -> "exit${caret.exit}@${caret.offset}"
-        }
+        val boundary = CaretLayout(buildNat(expr)).boundary(caret) ?: return "inner@${caret.offset}"
+        val side = if (boundary.before) "before" else "after"
+        return "$side(${boundary.node.srcStart}..${boundary.node.srcEnd})"
     }
 }

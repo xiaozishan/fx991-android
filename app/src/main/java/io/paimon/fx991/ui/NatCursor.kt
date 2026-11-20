@@ -101,35 +101,37 @@ object CursorModel {
      * 找垂直移动的目标源码偏移：最深优先（嵌套结构先在内层走），
      * 内层没有可走方向才轮到本层。找不到返回 null。
      */
-    private fun verticalTarget(node: Nat, cur: Int, up: Boolean): Int? {
+    internal fun verticalTarget(node: Nat, cur: Int, up: Boolean, boundary: Nat? = null): Int? {
+        if (node === boundary) return null
+        fun moveWithin(child: Nat): Int? =
+            if (inSpan(child, cur)) verticalTarget(child, cur, up, boundary) else null
+
         // 1) 先看子结构（最深优先）
         when (node) {
             is Nat.Row -> for (c in node.items) {
-                if (inSpan(c, cur)) verticalTarget(c, cur, up)?.let { return it }
+                moveWithin(c)?.let { return it }
             }
             is Nat.Frac -> {
-                if (inSpan(node.n, cur)) verticalTarget(node.n, cur, up)?.let { return it }
-                if (inSpan(node.d, cur)) verticalTarget(node.d, cur, up)?.let { return it }
+                moveWithin(node.n)?.let { return it }
+                moveWithin(node.d)?.let { return it }
             }
-            is Nat.Sqrt -> if (inSpan(node.a, cur)) {
-                verticalTarget(node.a, cur, up)?.let { return it }
-            }
+            is Nat.Sqrt -> moveWithin(node.a)?.let { return it }
             is Nat.Sup -> {
-                if (inSpan(node.base, cur)) verticalTarget(node.base, cur, up)?.let { return it }
-                if (inSpan(node.exp, cur)) verticalTarget(node.exp, cur, up)?.let { return it }
+                moveWithin(node.base)?.let { return it }
+                moveWithin(node.exp)?.let { return it }
             }
             is Nat.Integ -> {
-                if (inSpan(node.body, cur)) verticalTarget(node.body, cur, up)?.let { return it }
-                if (inSpan(node.lo, cur)) verticalTarget(node.lo, cur, up)?.let { return it }
-                if (inSpan(node.hi, cur)) verticalTarget(node.hi, cur, up)?.let { return it }
+                moveWithin(node.body)?.let { return it }
+                moveWithin(node.lo)?.let { return it }
+                moveWithin(node.hi)?.let { return it }
             }
             else -> {}
         }
         // 2) 本层映射
         return when (node) {
             is Nat.Frac -> when {
-                !up && inSpan(node.n, cur) -> mapSlot(node.n, node.d, cur)
-                up && inSpan(node.d, cur) -> mapSlot(node.d, node.n, cur)
+                !up && inSpan(node.n, cur) -> fractionRow(node.d, fractionColumn(node.n, cur, boundary), up)
+                up && inSpan(node.d, cur) -> fractionRow(node.n, fractionColumn(node.d, cur, boundary), up)
                 else -> null
             }
             is Nat.Sup -> when {
@@ -157,6 +159,23 @@ object CursorModel {
         }
     }
 
+    /** 保留光标在当前分数行中的列，忽略源码的分组括号。 */
+    private fun fractionColumn(slot: Nat, cur: Int, boundary: Nat?): Int {
+        val content = groupContent(slot) ?: slot
+        if (content is Nat.Frac && content !== boundary) {
+            if (inSpan(content.n, cur)) return fractionColumn(content.n, cur, boundary)
+            if (inSpan(content.d, cur)) return fractionColumn(content.d, cur, boundary)
+        }
+        return (cur - content.srcStart).coerceAtLeast(0)
+    }
+
+    /** 向上进入目标槽的最下行，向下进入最上行。 */
+    private fun fractionRow(slot: Nat, column: Int, up: Boolean): Int? {
+        val content = groupContent(slot) ?: slot
+        if (content is Nat.Frac) return fractionRow(if (up) content.d else content.n, column, up)
+        return if (content.srcStart >= 0) column.coerceAtMost(content.srcEnd - content.srcStart) + content.srcStart else null
+    }
+
     /** 根号内容的末尾位置：带括号的组要回到闭括号之前 */
     private fun innerEnd(a: Nat): Int =
         if (a.srcStart < 0) -1
@@ -168,13 +187,16 @@ object CursorModel {
      * 只数槽位（分子/分母/底数/指数/根号内容/积分三槽），不数容器本身的边缘
      * （√ 符号、int( 前缀、收尾括号之后）—— 那些位置没有垂直去处，按线性式走首/尾。
      */
-    private fun insideSlot(node: Nat, cur: Int): Boolean = when (node) {
-        is Nat.Row -> node.items.any { insideSlot(it, cur) }
-        is Nat.Frac -> inSpan(node.n, cur) || inSpan(node.d, cur)
-        is Nat.Sqrt -> inSpan(node.a, cur)
-        is Nat.Sup -> inSpan(node.base, cur) || inSpan(node.exp, cur)
-        is Nat.Integ -> inSpan(node.body, cur) || inSpan(node.lo, cur) || inSpan(node.hi, cur)
-        else -> false
+    internal fun insideSlot(node: Nat, cur: Int, boundary: Nat? = null): Boolean {
+        if (node === boundary) return false
+        return when (node) {
+            is Nat.Row -> node.items.any { insideSlot(it, cur, boundary) }
+            is Nat.Frac -> inSpan(node.n, cur) || inSpan(node.d, cur)
+            is Nat.Sqrt -> inSpan(node.a, cur)
+            is Nat.Sup -> inSpan(node.base, cur) || inSpan(node.exp, cur)
+            is Nat.Integ -> inSpan(node.body, cur) || inSpan(node.lo, cur) || inSpan(node.hi, cur)
+            else -> false
+        }
     }
 
     /** 在光标处插入文本；新光标落在插入文本之后 */
@@ -245,9 +267,9 @@ object CursorModel {
             }
         }
         if (op !in SLOT_OPS) return insert(expr, p, op)
-        val span = fracSlotAt(expr, p) ?: return insert(expr, p, op)
-        val s = span.first
-        val e = span.last + 1
+        val slot = editableFractionSlot(expr, buildNat(expr), p, boundary = null) ?: return insert(expr, p, op)
+        val s = slot.srcStart
+        val e = slot.srcEnd
         if (e <= s || p <= s) return insert(expr, p, op)   // 空槽 / 槽首：按普通输入
         val content = expr.substring(s, e)
         if (isWholeParenGroup(content)) {
@@ -257,44 +279,6 @@ object CursorModel {
         }
         val wrapped = expr.substring(0, s) + "(" + content + ")" + expr.substring(e)
         return insert(wrapped, p + 1, op)
-    }
-
-    /** 离光标最近（最深）的那个分数槽的源码区间 */
-    private fun fracSlotAt(expr: String, pos: Int): IntRange? {
-        val root = try {
-            buildNat(expr)
-        } catch (_: Exception) {
-            return null
-        }
-        var best: IntRange? = null
-        fun walk(n: Nat) {
-            when (n) {
-                is Nat.Row -> n.items.forEach { if (inSpan(it, pos)) walk(it) }
-                is Nat.Frac -> {
-                    if (inSpan(n.n, pos)) {
-                        if (n.n.srcStart >= 0 && n.n.srcEnd > n.n.srcStart) best = n.n.srcStart until n.n.srcEnd
-                        walk(n.n)
-                    }
-                    if (inSpan(n.d, pos)) {
-                        if (n.d.srcStart >= 0 && n.d.srcEnd > n.d.srcStart) best = n.d.srcStart until n.d.srcEnd
-                        walk(n.d)
-                    }
-                }
-                is Nat.Sqrt -> if (inSpan(n.a, pos)) walk(n.a)
-                is Nat.Sup -> {
-                    if (inSpan(n.base, pos)) walk(n.base)
-                    if (inSpan(n.exp, pos)) walk(n.exp)
-                }
-                is Nat.Integ -> {
-                    if (inSpan(n.body, pos)) walk(n.body)
-                    if (inSpan(n.lo, pos)) walk(n.lo)
-                    if (inSpan(n.hi, pos)) walk(n.hi)
-                }
-                else -> {}
-            }
-        }
-        walk(root)
-        return best
     }
 
     /** 整串是否恰好被一层括号包住（如 "(5×6)"）；中间提前闭合则返回 false */
@@ -351,11 +335,33 @@ object CursorModel {
      * 分子是空槽（行首 / 运算符 / 开括号 / 分隔符之后）时，光标留在分子空位
      * （与二级界面键盘 a/b 的 cursorBack=1 一致）；分子有内容时进分母槽。
      */
-    fun insertFraction(expr: String, pos: Int): EditResult {
-        val p = clamp(expr, pos)
+    fun insertFraction(expr: String, pos: Int): EditResult = insertFraction(expr, Caret(pos))
+
+    fun insertFraction(expr: String, caret: Caret): EditResult {
+        val layout = CaretLayout(buildNat(expr))
+        val current = layout.normalize(caret.copy(offset = clamp(expr, caret.offset)))
+        val p = current.offset
+        val boundary = layout.boundary(current)
+        if (boundary?.before == true && boundary.node is Nat.Frac) {
+            val end = boundary.node.srcEnd
+            val fraction = expr.substring(p, end)
+            return EditResult(expr.replaceRange(p, end, "÷($fraction)"), p)
+        }
+
+        val slot = editableFractionSlot(expr, layout.root, p, boundary?.node)
+        val expSpan = supExpSlotAt(layout.root, p, boundary?.node)
+
+        if (slot != null && (expSpan == null || slot.srcStart >= expSpan.first && slot.srcEnd <= expSpan.second)) {
+            val content = groupContent(slot)
+            if (content != null) {
+                return insertFractionAt(expr, p.coerceIn(content.srcStart, content.srcEnd), content.srcStart)
+            }
+            val wrapped = expr.replaceRange(slot.srcStart, slot.srcEnd, "(${expr.substring(slot.srcStart, slot.srcEnd)})")
+            return insertFractionAt(wrapped, p + 1, slot.srcStart + 1)
+        }
+
         // 指数槽里按分数键：把指数内容包一层括号再插 ÷，分数要留在指数里，
         // 否则 ÷ 会按乘法/除法优先级掉到基线下（x^2÷3 = (x^2)÷3）
-        val expSpan = supExpSlotAt(expr, p)
         if (expSpan != null) {
             val s = expSpan.first
             val e = expSpan.second            // 开区间（end 不含）
@@ -374,9 +380,36 @@ object CursorModel {
                 return insert(wrapped, p + 1, "÷")
             }
         }
-        val r = insert(expr, p, "÷")
-        val emptyNum = p == 0 || expr[p - 1] in "+−×÷^(,=;∠·±"
-        return if (emptyNum) EditResult(r.text, p) else r
+        return insertFractionAt(expr, p, 0)
+    }
+
+    private fun insertFractionAt(expr: String, pos: Int, slotStart: Int): EditResult {
+        val r = insert(expr, pos, "÷")
+        val emptyNum = pos == slotStart || expr[pos - 1] in "+−-×*/÷^(,=;∠·±"
+        return if (emptyNum) EditResult(r.text, pos) else r
+    }
+
+    private fun editableFractionSlot(expr: String, node: Nat, pos: Int, boundary: Nat?): Nat? {
+        if (node === boundary || !inSpan(node, pos)) return null
+        fun find(child: Nat) = editableFractionSlot(expr, child, pos, boundary)
+        return when (node) {
+            is Nat.Row -> node.items.firstNotNullOfOrNull(::find)
+            is Nat.Sqrt -> find(node.a)
+            is Nat.Sup -> find(node.base) ?: find(node.exp)
+            is Nat.Integ -> find(node.body) ?: find(node.lo) ?: find(node.hi)
+            is Nat.Frac -> {
+                val slot = when {
+                    inSpan(node.n, pos) -> node.n
+                    inSpan(node.d, pos) -> node.d
+                    else -> return null
+                }
+                // 仅处理有实际分隔符的分数，x⁻¹ 的合成分子无法编辑。
+                val hasDivider = node.n.srcEnd in 0 until node.d.srcStart &&
+                    expr.substring(node.n.srcEnd, node.d.srcStart).any { it == '÷' || it == '/' }
+                find(slot) ?: slot.takeIf { hasDivider }
+            }
+            else -> null
+        }
     }
 
     /**
@@ -511,14 +544,12 @@ object CursorModel {
     }
 
     /** 离光标最近的指数槽（Nat.Sup.exp）源码区间；返回 (start, end)，end 为开区间 */
-    private fun supExpSlotAt(expr: String, pos: Int): Pair<Int, Int>? {
-        val root = try {
-            buildNat(expr)
-        } catch (_: Exception) {
-            return null
-        }
+    private fun supExpSlotAt(expr: String, pos: Int): Pair<Int, Int>? = supExpSlotAt(buildNat(expr), pos)
+
+    private fun supExpSlotAt(root: Nat, pos: Int, boundary: Nat? = null): Pair<Int, Int>? {
         var best: Pair<Int, Int>? = null
         fun walk(n: Nat) {
+            if (n === boundary) return
             when (n) {
                 is Nat.Row -> n.items.forEach { if (inSpan(it, pos)) walk(it) }
                 is Nat.Frac -> {
@@ -554,6 +585,21 @@ object CursorModel {
 private fun inSpan(n: Nat, cur: Int): Boolean =
     n.srcStart >= 0 && cur >= n.srcStart && cur <= n.srcEnd
 
+/** 解析器将括号组表示为左括号、正文、右括号。 */
+internal fun groupContent(node: Nat): Nat? {
+    val items = (node as? Nat.Row)?.items ?: return null
+    if (items.size != 3) return null
+    val open = items[0] as? Nat.Sym ?: return null
+    val close = items[2] as? Nat.Sym ?: return null
+    return items[1].takeIf { open.text == "(" && close.text == ")" && close.srcEnd == node.srcEnd }
+}
+
+private fun placeFractionCursor(slot: Nat, cur: Int): Nat {
+    val content = groupContent(slot) ?: return placeCursor(slot, cur)
+    val items = (slot as Nat.Row).items
+    return Nat.Row(listOf(items[0], placeCursor(content, cur.coerceIn(content.srcStart, content.srcEnd)), items[2]))
+}
+
 /**
  * 在源码区间为 [srcStart, srcEnd] 的节点里落光标（调用方保证 cur 落在节点区间内）。
  * 优先深入包含 cur 的子节点 —— 所以光标能走进分数分子/分母、根号、上标、括号组、空槽位。
@@ -583,7 +629,10 @@ private fun placeCursor(node: Nat, cur: Int): Nat = when (node) {
     }
 
     is Nat.Row -> {
-        val idx = node.items.indexOfFirst { inSpan(it, cur) }
+        val first = node.items.indexOfFirst { inSpan(it, cur) }
+        val idx = if (first >= 0 && node.items[first] is Nat.Sym) {
+            node.items.indexOfFirst { it is Nat.Frac && it.srcStart == cur }.takeIf { it >= 0 } ?: first
+        } else first
         if (idx >= 0) {
             val items = node.items.toMutableList()
             items[idx] = placeCursor(items[idx], cur)
@@ -597,8 +646,8 @@ private fun placeCursor(node: Nat, cur: Int): Nat = when (node) {
     }
 
     is Nat.Frac -> when {
-        inSpan(node.n, cur) -> Nat.Frac(placeCursor(node.n, cur), node.d)
-        inSpan(node.d, cur) -> Nat.Frac(node.n, placeCursor(node.d, cur))
+        inSpan(node.n, cur) -> Nat.Frac(placeFractionCursor(node.n, cur), node.d)
+        inSpan(node.d, cur) -> Nat.Frac(node.n, placeFractionCursor(node.d, cur))
         cur <= node.srcStart -> Nat.Row(listOf(Nat.Cursor, node))
         else -> Nat.Row(listOf(node, Nat.Cursor))
     }
@@ -642,84 +691,18 @@ fun buildNatCursor(expr: String, cursor: Int): Nat {
 /**
  * 结构层级版：cursorExit > 0 表示光标已从结构里跳出到外侧。
  * 分数/指数/根号的「内容末尾」与「结构右边界」是同一个字符串偏移，
- * 跳出时把光标标记放到整棵树的末尾（或开头），视觉上才真的离开结构。
+ * 跳出时在该结构的父层放置光标。
  */
 fun buildNatCursor(expr: String, cursor: Int, cursorExit: Int): Nat {
     val root = buildNat(expr)
     val p = cursor.coerceIn(0, expr.length)
     if (cursorExit <= 0) return placeCursor(root, p)
 
-    // 光标在某个结构的右边界外：把这个结构整体包一层，光标画在父层级（结构外面）
-    val ends = ArrayList<Nat>()
-    collectEnds(root, p, ends)
-    ends.sortByDescending { it.srcStart }
-    ends.getOrNull(cursorExit - 1)?.let { target ->
-        wrapNode(root, target, before = false)?.let { return it }
-    }
-
-    // 左边界外
-    val starts = ArrayList<Nat>()
-    collectStarts(root, p, starts)
-    starts.sortBy { it.srcEnd }
-    starts.getOrNull(cursorExit - 1)?.let { target ->
-        wrapNode(root, target, before = true)?.let { return it }
+    CaretLayout(root).boundary(Caret(p, cursorExit))?.let { target ->
+        wrapNode(root, target.node, target.before)?.let { return it }
     }
 
     return placeCursor(root, p)
-}
-
-private fun collectEnds(n: Nat, p: Int, out: MutableList<Nat>) {
-    when (n) {
-        is Nat.Row -> n.items.forEach { collectEnds(it, p, out) }
-        is Nat.Frac -> {
-            collectEnds(n.n, p, out)
-            collectEnds(n.d, p, out)
-            if (n.srcEnd == p) out.add(n)
-        }
-        is Nat.Sup -> {
-            collectEnds(n.base, p, out)
-            collectEnds(n.exp, p, out)
-            if (n.srcEnd == p) out.add(n)
-        }
-        is Nat.Sqrt -> {
-            collectEnds(n.a, p, out)
-            if (n.srcEnd == p) out.add(n)
-        }
-        is Nat.Integ -> {
-            collectEnds(n.body, p, out)
-            collectEnds(n.lo, p, out)
-            collectEnds(n.hi, p, out)
-            if (n.srcEnd == p) out.add(n)
-        }
-        else -> Unit
-    }
-}
-
-private fun collectStarts(n: Nat, p: Int, out: MutableList<Nat>) {
-    when (n) {
-        is Nat.Row -> n.items.forEach { collectStarts(it, p, out) }
-        is Nat.Frac -> {
-            collectStarts(n.n, p, out)
-            collectStarts(n.d, p, out)
-            if (n.srcStart == p) out.add(n)
-        }
-        is Nat.Sup -> {
-            collectStarts(n.base, p, out)
-            collectStarts(n.exp, p, out)
-            if (n.srcStart == p) out.add(n)
-        }
-        is Nat.Sqrt -> {
-            collectStarts(n.a, p, out)
-            if (n.srcStart == p) out.add(n)
-        }
-        is Nat.Integ -> {
-            collectStarts(n.body, p, out)
-            collectStarts(n.lo, p, out)
-            collectStarts(n.hi, p, out)
-            if (n.srcStart == p) out.add(n)
-        }
-        else -> Unit
-    }
 }
 
 /** 把 target 节点换成 Row(target, Cursor) 或 Row(Cursor, target)；找不到返回 null */

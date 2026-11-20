@@ -39,8 +39,11 @@ import io.paimon.fx991.engine.UserFnDef
 import io.paimon.fx991.engine.UserFunctions
 import io.paimon.fx991.engine.Value
 import io.paimon.fx991.engine.VectorStore
-import io.paimon.fx991.ui.KeyAction
 import io.paimon.fx991.ui.APP_VERSION
+import io.paimon.fx991.ui.Caret
+import io.paimon.fx991.ui.CaretModel
+import io.paimon.fx991.ui.CursorModel
+import io.paimon.fx991.ui.KeyAction
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -86,7 +89,7 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun pushUndo() {
         val last = undoStack.lastOrNull()
-        if (last != null && last.text == expression && last.cursor == cursor) return
+        if (last != null && last.text == expression && last.cursor == cursor && last.exit == cursorExit) return
         undoStack.addLast(EditSnapshot(expression, cursor, cursorExit))
         if (undoStack.size > 200) undoStack.removeFirst()
         redoStack.clear()
@@ -140,48 +143,45 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
     /** 批次 K3-B：二级界面自然输入的焦点状态（哪个字段在被自家键盘编辑） */
     val natInput = io.paimon.fx991.ui.NatInput()
 
-    fun moveCursorLeft() {
-        val next = io.paimon.fx991.ui.CaretModel.left(
-            expression,
-            io.paimon.fx991.ui.Caret(cursor, cursorExit),
-        )
+    private val caret: Caret get() = Caret(cursor, cursorExit)
+
+    private fun setCaret(next: Caret) {
         cursor = next.offset
         cursorExit = next.exit
     }
 
+    fun moveCursorLeft() {
+        setCaret(CaretModel.left(expression, caret))
+    }
+
     fun moveCursorRight() {
-        val next = io.paimon.fx991.ui.CaretModel.right(
-            expression,
-            io.paimon.fx991.ui.Caret(cursor, cursorExit),
-        )
-        cursor = next.offset
-        cursorExit = next.exit
+        setCaret(CaretModel.right(expression, caret))
     }
 
     /** 批次 K3-symbolic：方向键上下 = 二维结构内垂直移光标（分数分子↔分母、上标↔基线、根号内外、∫上下限） */
     fun moveCursorUp() {
-        cursorExit = 0
-        cursor = io.paimon.fx991.ui.CursorModel.moveUp(expression, cursor)
+        setCaret(CaretModel.up(expression, caret))
     }
 
     fun moveCursorDown() {
-        // 指数里按 ▼：同样退出到正常行内
-        val exit = io.paimon.fx991.ui.CursorModel.exitSupIfAtEnd(expression, cursor)
-        if (exit != null && io.paimon.fx991.ui.CursorModel.moveDown(expression, cursor) == cursor) {
-            expression = exit.text
-            cursor = exit.cursor
-            refreshPreview()
-            return
+        val next = CaretModel.down(expression, caret)
+        if (cursorExit == 0 && next.offset == cursor) {
+            // 指数达到末尾时收束指数，再退出到基线。
+            CursorModel.exitSupIfAtEnd(expression, cursor)?.let { exit ->
+                expression = exit.text
+                setCaret(Caret(exit.cursor))
+                refreshPreview()
+                return
+            }
         }
-        cursor = io.paimon.fx991.ui.CursorModel.moveDown(expression, cursor)
+        setCaret(next)
     }
 
     /** 手指点 LCD 表达式：按横向比例把光标放到对应位置（手指触摸移光标） */
     fun tapToCursor(fraction: Float) {
-        cursorExit = 0
         if (expression.isEmpty()) return
         val f = fraction.coerceIn(0f, 1f)
-        cursor = Math.round(f * expression.length).coerceIn(0, expression.length)
+        setCaret(CaretModel.normalize(expression, Caret(Math.round(f * expression.length))))
     }
 
     var resultText by mutableStateOf("")
@@ -540,8 +540,8 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
             c.isDigit() || c == '.' || c.isLetter() || c == '\u221A' || c == '('
         }
         if (!operand) return io.paimon.fx991.ui.CursorModel.insert(expression, cursor, text)
-        return if (cursor == 0) {
-            val r = io.paimon.fx991.ui.CursorModel.insert(expression, 0, text + "\u00D7")
+        return if (CaretModel.isBeforeStructure(expression, caret)) {
+            val r = CursorModel.insert(expression, cursor, text + "\u00D7")
             io.paimon.fx991.ui.EditResult(r.text, r.cursor - 1)
         } else {
             io.paimon.fx991.ui.CursorModel.insert(expression, cursor, "\u00D7" + text)
@@ -565,7 +565,7 @@ class CalcViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         pushUndo()
-        val r = io.paimon.fx991.ui.CursorModel.insertFraction(expression, cursor)
+        val r = CursorModel.insertFraction(expression, caret)
         expression = r.text
         cursor = r.cursor
         cursorExit = 0
